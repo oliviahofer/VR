@@ -25,6 +25,8 @@
 #include <OpenSG/OSGMaterialGroup.h>
 #include <OpenSG/OSGImage.h>
 #include <OpenSG/OSGSimpleTexturedMaterial.h>
+//FOR BACKGROUND
+#include <OpenSG/OSGSkyBackground.h>
 //FOR CAVESCEBEMANAGER
 #include <OSGCSM/OSGCAVESceneManager.h>
 #include <OSGCSM/OSGCAVEConfig.h>
@@ -38,62 +40,11 @@
 
 OSG_USING_NAMESPACE // activate the OpenSG namespace
 
-static std::string _vertex_shader =
-"\n"
-"varying vec3 ViewDirection;\n"
-"varying vec3 fvObjectPosition;\n"
-"varying vec3 Normal;\n"
-"   \n"
-"void main( void )\n"
-"{\n"
-"   gl_Position = ftransform();\n"
-"    \n"
-"   fvObjectPosition = vec3(gl_ModelViewMatrix * gl_Vertex);\n"
-"   \n"
-"   ViewDirection  = - fvObjectPosition.xyz;\n"
-"   Normal         = gl_NormalMatrix * gl_Normal;\n"
-"   gl_FrontColor  = gl_FrontMaterial.diffuse;\n"
-"   \n"
-"}\n";
-
-static std::string _fragment_shader =
-"vec4 fvAmbient  = vec4(0.36, 0.36, 0.36, 1.0);\n"
-"vec4 fvSpecular = vec4(0.7,  0.7,  0.7,  1.0);\n"
-"vec4 fvDiffuse  = vec4(0.5,  0.5,  0.5,  1.0);\n"
-"float fSpecularPower = 25.0;\n"
-"\n"
-"uniform sampler2D baseMap;\n"
-"uniform int useTexture;\n"
-"\n"
-"varying vec2 Texcoord;\n"
-"varying vec3 ViewDirection;\n"
-"varying vec3 fvObjectPosition;\n"
-"varying vec3 Normal;\n"
-"\n"
-"void main( void )\n"
-"{\n"
-"   vec3  fvLightDirection = normalize( gl_LightSource[0].position.xyz - fvObjectPosition.xyz);\n"
-"   vec3  fvNormal         = normalize( Normal );\n"
-"   float fNDotL           = dot( fvNormal, fvLightDirection ); \n"
-"   \n"
-"   vec3  fvReflection     = normalize( ( ( 2.0 * fvNormal ) * fNDotL ) - fvLightDirection ); \n"
-"   vec3  fvViewDirection  = normalize( ViewDirection );\n"
-"   float fRDotV           = max( 0.0, dot( fvReflection, fvViewDirection ) );\n"
-"   \n"
-"   vec4  fvBaseColor      = gl_Color;\n"
-"   \n"
-"   vec4  fvTotalAmbient   = fvAmbient * fvBaseColor; \n"
-"   vec4  fvTotalDiffuse   = fvDiffuse * fNDotL * fvBaseColor; \n"
-"   vec4  fvTotalSpecular  = fvSpecular * ( pow( fRDotV, fSpecularPower ) );\n"
-"  \n"
-"   gl_FragColor = ( fvTotalAmbient + fvTotalDiffuse + fvTotalSpecular );\n"
-"}\n";
-
-
 
 //------------------------------------------------------------------------------
 // Global Variables
 //------------------------------------------------------------------------------
+#define VELOCITY		(500) // (100) = eigener Laptop, (500) = Linux Cave
 OSGCSM::CAVEConfig cfg;
 OSGCSM::CAVESceneManager *mgr = nullptr; // the CaveSceneManager to manage applications
 vrpn_Tracker_Remote* tracker =  nullptr; // tracking
@@ -192,7 +143,7 @@ static int patestCallback( const void *inputBuffer, void *outputBuffer,
 	// creating bubbles
 	if (!mode){
 		for ( i=0; i<framesPerBuffer; i++ ){
-			if (in[i] >0.5) {
+			if (in[i] >0.4) {
 				//printf(  "patestCallback: %f\n", in[i] );
 				blowing = std::tuple<bool, float>(true, in[i]);
 			} else {
@@ -246,11 +197,11 @@ int setupPortAudio() {
 			err = numDevices;
 		}
 	else {
-		const   PaDeviceInfo *deviceInfo;
-		for( int i=0; i<numDevices; i++ )
-			{
-			deviceInfo = Pa_GetDeviceInfo( i );
-			std::cout << " device " << i <<": " << deviceInfo->name << std::endl;
+		//const   PaDeviceInfo *deviceInfo;
+		//for( int i=0; i<numDevices; i++ )
+			//{
+			//deviceInfo = Pa_GetDeviceInfo( i );
+			//std::cout << " device " << i <<": " << deviceInfo->name << std::endl;
 			
 			inputParameters.channelCount = NUM_CHANNELS;
 			inputParameters.device = inDevNum;
@@ -263,26 +214,27 @@ int setupPortAudio() {
 			err = Pa_IsFormatSupported(&inputParameters, NULL , SAMPLE_RATE );
 			if( err == paFormatIsSupported )
 			{
-			      /* Open an audio I/O stream. */
-				err = Pa_OpenStream( 
-								&stream,
-                                &inputParameters,	// one input channel 
-                                NULL,				// no output 
-                                SAMPLE_RATE,		// sample rate 
-								FRAMES_PER_BUFFER,	// frames per buffer
-								paNoFlag,			// flags for clipping etc
-                                patestCallback,		// this is your callback function 
-                                NULL);				// no data to pass 
-				 if( err != paNoError ) printf(  "PortAudio Pa_OpenStream() error: %s\n", Pa_GetErrorText( err ) );
+			     printf("paFormatIsSupported.\n");
 			}
 			else
 			{
-			   printf("Too Bad.\n");
+			   printf("Too Bad. paFormatIs NOT Supported \n");
 			}
-		}
+
+			err = Pa_OpenStream( 
+				&stream,
+                &inputParameters,	// one input channel 
+                NULL,				// no output 
+                SAMPLE_RATE,		// sample rate 
+				FRAMES_PER_BUFFER,	// frames per buffer
+				paNoFlag,			// flags for clipping etc
+                patestCallback,		// this is your callback function 
+                NULL);				// no data to pass 
+			if( err != paNoError ) printf(  "PortAudio Pa_OpenStream() error: %s\n", Pa_GetErrorText( err ) );
+		//}
 	}
 
-
+	 /* Open an audio I/O stream. */
     /*err = Pa_OpenDefaultStream( &stream,
                                 NUM_CHANNELS,		// one input channel 
                                 0,					// no output 
@@ -386,35 +338,10 @@ void print_tracker()
 NodeTransitPtr createBubble(float radius) {
 	//printf(  "createBubble \n" );
 
-
 	//NodeRecPtr bubble = makeSphere(2,3);
 	GeometryRecPtr bubbleGeo = makeSphereGeo(2, (1/radius)*(1/radius)*(1/radius));
 	NodeRecPtr bubble = Node::create();
 	bubble->setCore(bubbleGeo);
-
-	// shader ************************************
-
-	/*OSG::ChunkMaterialUnrecPtr cmat = OSG::ChunkMaterial::create();
-	OSG::ShaderProgramChunkUnrecPtr shl = OSG::ShaderProgramChunk::create();
-
-	// Vertex Shader
-	OSG::ShaderProgramUnrecPtr shl_vp = OSG::ShaderProgram::createVertexShader();
-	/*if(!shl_vp->readProgram("models/vertex.vp"))
-		fprintf(stderr, "Couldn't read vertex program 'vertex.vp'\n");*/
-    /*shl_vp->setProgram(_vertex_shader);
-    shl->addShader(shl_vp);
-
-	// Fragment Shader
-	/*OSG::ShaderProgramUnrecPtr shl_fp = OSG::ShaderProgram::createFragmentShader();
-	/*if(!shl_fp->readProgram("models/fragment.fp"))
-        fprintf(stderr, "Couldn't read fragment program 'fragment.fp'\n");*/
-    /*shl_fp->setProgram(_fragment_shader);
-    shl->addShader(shl_fp);
-
-	cmat->addChunk(shl);
-	cmat->setTransparencyMode(0.25);
-	bubbleGeo->setMaterial(cmat); */
-	//now we create the texture that will hold the image
 
 	SimpleTexturedMaterialRecPtr tex = SimpleTexturedMaterial::create();
 	ImageRecPtr image = Image::create();
@@ -430,7 +357,8 @@ NodeTransitPtr createBubble(float radius) {
     
     ComponentTransformRecPtr ct = ComponentTransform::create();
 	Vec3f direction = getDirection(headCT, directionCT) - headCT->getTranslation();
-	ct->setTranslation(head_position  + direction*30 );
+	Vec3f offset = Vec3f(0,-10,0);
+	ct->setTranslation(head_position  + direction*30  + offset );
 
 	NodeRecPtr bubbleTrans = Node::create();
 	bubbleTrans->setCore(ct);
@@ -454,7 +382,7 @@ NodeTransitPtr buildScene()
 	scene->setCore(Group::create());
 
 	//Make Ground
-	GeometryRecPtr groundGeo = makePlaneGeo(250.f, 250.f, 1, 1);
+	GeometryRecPtr groundGeo = makePlaneGeo(270.f, 270.f, 1, 1);
 	SimpleMaterialRecPtr mat = SimpleMaterial::create();
 	mat->setAmbient(Color3f(0.4f, 0.f, 0.f));
 	groundGeo->setMaterial(mat);
@@ -488,6 +416,34 @@ NodeTransitPtr buildScene()
 	scene->addChild(groundTrans);
 	scene->addChild(head);
 
+	// Skybox
+	int scaleSkybox = 1;
+
+	//skydome_day.WRL
+	/*NodeRecPtr skybox = SceneFileHandler::the()->read("images/skydome/skydome_day.WRL");
+	setName(skybox, "skybox");
+	ComponentTransformRecPtr skyboxCT = ComponentTransform::create();
+	skyboxCT->setTranslation(Vec3f(0,0,0));
+	skyboxCT->setScale(Vec3f(scaleSkybox,scaleSkybox,scaleSkybox));
+
+	
+	skybox->setCore(skyboxCT);
+	// Create skybox Transform
+	NodeRecPtr skyboxTrans = Node::create();
+	setName(skyboxTrans, "skyboxTrans");
+
+	//NodeRecPtr skyboxTrans = makeNodeFor(skyboxCT);
+	skyboxTrans->addChild(skybox);
+	scene->addChild(skyboxTrans);
+
+	// Read floor texture
+	/*ImageRecPtr imageSkybox = Image::create();
+	imageSkybox->read("images/skydome/maps/Skymap_cambridge_gen2_square.jpg");
+
+	// Create floor texture from floor image
+	SimpleTexturedMaterialRecPtr texSkybox = SimpleTexturedMaterial::create();
+	texSkybox->setImage(imageSkybox);*/
+
 	return NodeTransitPtr(scene);
 }
 
@@ -510,7 +466,6 @@ std::vector<std::string> getProperties(const char *str)
 	boost::split(strs, str , boost::is_any_of(":"));
 
 	return  strs;
-	//TODO Fehlerbehandlung
 }
 
 void detectCollisions(OSG::Node * const currentNode, Vec3f currentPosition, float currentRadius){
@@ -523,7 +478,7 @@ void detectCollisions(OSG::Node * const currentNode, Vec3f currentPosition, floa
 
 	float distance = std::sqrt(xd*xd + yd*yd + zd*zd);
 
-	if( (std::abs(distance)) < ( (1/currentRadius)*(1/currentRadius)*(1/currentRadius))){
+	if( (std::abs(distance)) < ( (1/currentRadius)*(1/currentRadius)*(1/currentRadius) + 10)){
 		//std::cout << "wand collisionDetected: \n";
 		nodesToRemove.push_back(currentNode);
 		return;
@@ -544,7 +499,9 @@ void detectCollisions(OSG::Node * const currentNode, Vec3f currentPosition, floa
 				float zd = currentPosition.z() - position.z();
 
 				float distance = std::sqrt(xd*xd + yd*yd + zd*zd);
-				if( (std::abs(distance)) < ( (1/currentRadius)*(1/currentRadius)*(1/currentRadius) + (1/radius)*(1/radius)*(1/radius)) ){
+				float currentR = (1/currentRadius)*(1/currentRadius)*(1/currentRadius);
+				float r = (1/radius)*(1/radius)*(1/radius);
+				if( ((std::abs(distance)) < ( currentR + r)) && ((std::abs(distance)) > ( std::max(currentR ,r)))  ){
 
 					//std::cout << "collisionDetected: \n";
 
@@ -581,7 +538,7 @@ OSG::Action::ResultE enter(OSG::Node * const node)
 		Real32 ttl = std::stof(properties[5]);
 		float v = std::stof( properties[4] );
 
-		if( (time-ttl) < (10000*v) ) {
+		if( (time-ttl) < (VELOCITY *100 *v) ) {
 			float x = std::stof( properties[1] );
 			float y = std::stof( properties[2] );
 			float z = std::stof( properties[3] );
@@ -589,14 +546,10 @@ OSG::Action::ResultE enter(OSG::Node * const node)
 			ComponentTransformRecPtr bt = dynamic_cast<ComponentTransform*>(node->getCore());
 
 			Vec3f vec = bt->getTranslation();
-			Vec3f direction = OSG::Vec3f( x , y - 0.01*v/2  ,z );
-			Vec3f vec2 = vec + direction;//* ( v/20 );
+			Vec3f direction = OSG::Vec3f( x , y - ((VELOCITY*v)/200000)  ,z );
+			Vec3f vec2 = vec + direction * (VELOCITY*v)/2000 ;
 
 			bt->setTranslation( vec2 ); //MOVE
-
-			//bt->setTranslation(Vec3f(1,0.01*time,1));
-			//bt->setRotation(Quaternion(Vec3f(1,0,0),osgDegree2Rad(270)+0.001f*time));
-			//bt->setScale(Vec3f(0.001,0.001,0.001));
 
 			nodePositions[node] = std::tuple<OSG::Vec3f,float>(vec, v);
 			detectCollisions(node, vec, v);
@@ -648,16 +601,16 @@ OSG::Action::ResultE moveBubbles(OSG::Node * const node) {
 		std::vector<std::string> properties = getProperties(name);
 		float v = std::stof( properties[4] );
 		float x = 0;
-		float y = -0.1 * ( v/20 );
-		if (frequency > 100 ) {
-			y = ((100*std::log10(frequency)) - (100*std::log10(330)) ) *0.01 * ( v/20 );  // 330 = e
+		float y = -1 ;
+		if (frequency > 100 && frequency < 1000) {
+			y = ((std::log10(frequency)) - (std::log10(330)) ) *100 ;  // 330 = e
 		}
 		float z = 0;
 
 		ComponentTransformRecPtr bt = dynamic_cast<ComponentTransform*>(node->getCore());
 
 		Vec3f vec = bt->getTranslation();
-		Vec3f direction = OSG::Vec3f( x , y ,z );
+		Vec3f direction = OSG::Vec3f( x , y * ((VELOCITY*v)/20000) ,z );
 		Vec3f vec2 = vec + direction;
 
 		bt->setTranslation( vec2 ); //MOVE
@@ -675,7 +628,7 @@ void setupGLUT(int *argc, char *argv[])
 {
 	glutInit(argc, argv);
 	glutInitDisplayMode(GLUT_RGB  |GLUT_DEPTH | GLUT_DOUBLE);
-	glutCreateWindow("OpenSG CSMDemo with VRPN API");
+	glutCreateWindow("Bubbles");
 	glutDisplayFunc([]()
 	{
 		// black navigation window
@@ -778,6 +731,10 @@ int main(int argc, char **argv)
 
 		setupPortAudio();
 
+		// Start PortAudio Stream
+		err = Pa_StartStream( stream ); 
+		if( err != paNoError ) printf(  "PortAudio Pa_StartStream() error: %s\n", Pa_GetErrorText( err ) );
+
 
 		MultiDisplayWindowRefPtr mwin = createAppWindow(cfg, cfg.getBroadcastaddress());
 
@@ -792,7 +749,10 @@ int main(int argc, char **argv)
 		mgr->showAll();
 		mgr->getWindow()->init();
 		mgr->turnWandOff();
+
+		
 	}
+
 	catch(const std::exception& e)
 	{
 		std::cout << "ERROR: " << e.what() << '\n';
@@ -855,7 +815,6 @@ void keyboard(unsigned char k, int x, int y)
 			break;
 		case 'c' : // create
 			// Start PortAudio Stream
-			//scene->addChild(createBubble());
 			err = Pa_StartStream( stream ); 
 			if( err != paNoError ) printf(  "PortAudio Pa_StartStream() error: %s\n", Pa_GetErrorText( err ) );
 			//Pa_IsStreamActive
