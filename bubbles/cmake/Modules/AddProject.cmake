@@ -130,6 +130,7 @@ function(_add_project_setup ADD_PROJECT_NAME)
 	include_directories("../../portaudio/include") # include header
 	link_directories("../../../portaudio/bin/Debug") # libraries
 	target_link_libraries(${ADD_PROJECT_NAME} ../../../portaudio/bin/Debug/portaudio_x86) # .lib file
+	file(COPY "../../portaudio/bin/Debug/portaudio_x86.dll" DESTINATION "./Debug" )
 	
 	# add path to runtime libraries (dll-files)
 	if (MSVC10 OR MSVC11)
