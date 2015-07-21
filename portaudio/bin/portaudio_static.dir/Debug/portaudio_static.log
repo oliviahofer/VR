@@ -1,0 +1,66 @@
+﻿Build started 21.07.2015 14:23:24.
+     1>Project "H:\VR\portaudio\bin\portaudio_static.vcxproj" on node 3 (Build target(s)).
+     1>CustomBuild:
+         Building Custom Rule H:/VR/portaudio/CMakeLists.txt
+         CMake does not need to re-run because H:\VR\portaudio\bin\CMakeFiles\generate.stamp is up-to-date.
+       ClCompile:
+         C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\CL.exe /c /IH:\VR\portaudio\src\os\win /IH:\VR\ASIOSDK\common /IH:\VR\ASIOSDK\host /IH:\VR\ASIOSDK\host\pc /IH:\VR\portaudio\include /IH:\VR\portaudio\src\common /IH:\VR\portaudio\bin /Zi /nologo /W3 /WX- /Od /Ob0 /Oy- /D UNICODE /D _UNICODE /D WIN32 /D _WINDOWS /D _DEBUG /D PAWIN_USE_WDMKS_DEVICE_INFO /D _CRT_SECURE_NO_WARNINGS /D PORTAUDIO_CMAKE_GENERATED /D "CMAKE_INTDIR=\"Debug\"" /D _MBCS /Gm- /EHsc /RTC1 /MTd /GS /fp:precise /Zc:wchar_t /Zc:forScope /GR /Fo"portaudio_static.dir\Debug\\" /Fd"portaudio_static.dir\Debug\vc110.pdb" /Gd /TC /analyze- /errorReport:prompt H:\VR\portaudio\src\common\pa_allocation.c H:\VR\portaudio\src\common\pa_converters.c H:\VR\portaudio\src\common\pa_cpuload.c H:\VR\portaudio\src\common\pa_debugprint.c H:\VR\portaudio\src\common\pa_dither.c H:\VR\portaudio\src\common\pa_front.c H:\VR\portaudio\src\common\pa_process.c H:\VR\portaudio\src\common\pa_ringbuffer.c H:\VR\portaudio\src\common\pa_stream.c H:\VR\portaudio\src\common\pa_trace.c H:\VR\portaudio\src\hostapi\wmme\pa_win_wmme.c H:\VR\portaudio\src\hostapi\wasapi\pa_win_wasapi.c H:\VR\portaudio\src\hostapi\wdmks\pa_win_wdmks.c H:\VR\portaudio\src\hostapi\skeleton\pa_hostapi_skeleton.c H:\VR\portaudio\src\os\win\pa_win_hostapis.c H:\VR\portaudio\src\os\win\pa_win_util.c H:\VR\portaudio\src\os\win\pa_win_waveformat.c H:\VR\portaudio\src\os\win\pa_win_wdmks_utils.c H:\VR\portaudio\src\os\win\pa_win_coinitialize.c H:\VR\portaudio\src\os\win\pa_x86_plain_converters.c
+         pa_allocation.c
+         pa_converters.c
+         pa_cpuload.c
+         pa_debugprint.c
+         pa_dither.c
+         pa_front.c
+         pa_process.c
+         pa_ringbuffer.c
+         pa_stream.c
+         pa_trace.c
+         pa_win_wmme.c
+         pa_win_wasapi.c
+         pa_win_wdmks.c
+         pa_hostapi_skeleton.c
+         pa_win_hostapis.c
+         pa_win_util.c
+         pa_win_waveformat.c
+         pa_win_wdmks_utils.c
+         pa_win_coinitialize.c
+         pa_x86_plain_converters.c
+         Generating Code...
+         C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\CL.exe /c /IH:\VR\portaudio\src\os\win /IH:\VR\ASIOSDK\common /IH:\VR\ASIOSDK\host /IH:\VR\ASIOSDK\host\pc /IH:\VR\portaudio\include /IH:\VR\portaudio\src\common /IH:\VR\portaudio\bin /Zi /nologo /W3 /WX- /Od /Ob0 /Oy- /D UNICODE /D _UNICODE /D WIN32 /D _WINDOWS /D _DEBUG /D PAWIN_USE_WDMKS_DEVICE_INFO /D _CRT_SECURE_NO_WARNINGS /D PORTAUDIO_CMAKE_GENERATED /D "CMAKE_INTDIR=\"Debug\"" /D _MBCS /Gm- /EHsc /RTC1 /MTd /GS /fp:precise /Zc:wchar_t /Zc:forScope /GR /Fo"portaudio_static.dir\Debug\\" /Fd"portaudio_static.dir\Debug\vc110.pdb" /Gd /TP /analyze- /errorReport:prompt H:\VR\portaudio\src\hostapi\asio\pa_asio.cpp
+         pa_asio.cpp
+         C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\CL.exe /c /IH:\VR\portaudio\src\os\win /IH:\VR\ASIOSDK\common /IH:\VR\ASIOSDK\host /IH:\VR\ASIOSDK\host\pc /IH:\VR\portaudio\include /IH:\VR\portaudio\src\common /IH:\VR\portaudio\bin /Zi /nologo /W3 /WX- /Od /Ob0 /Oy- /D WIN32 /D _WINDOWS /D _DEBUG /D PAWIN_USE_WDMKS_DEVICE_INFO /D _CRT_SECURE_NO_WARNINGS /D PORTAUDIO_CMAKE_GENERATED /D "CMAKE_INTDIR=\"Debug\"" /D _MBCS /Gm- /EHsc /RTC1 /MTd /GS /fp:precise /Zc:wchar_t /Zc:forScope /GR /Fo"portaudio_static.dir\Debug\\" /Fd"portaudio_static.dir\Debug\vc110.pdb" /Gd /TP /analyze- /errorReport:prompt H:\VR\ASIOSDK\common\asio.cpp H:\VR\ASIOSDK\host\pc\asiolist.cpp H:\VR\ASIOSDK\host\asiodrivers.cpp
+         asio.cpp
+         asiolist.cpp
+         asiodrivers.cpp
+         Generating Code...
+       Lib:
+         C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\Lib.exe /OUT:"H:\VR\portaudio\bin\Debug\portaudio_static_x86.lib" /NOLOGO portaudio_static.dir\Debug\pa_allocation.obj
+         portaudio_static.dir\Debug\pa_converters.obj
+         portaudio_static.dir\Debug\pa_cpuload.obj
+         portaudio_static.dir\Debug\pa_debugprint.obj
+         portaudio_static.dir\Debug\pa_dither.obj
+         portaudio_static.dir\Debug\pa_front.obj
+         portaudio_static.dir\Debug\pa_process.obj
+         portaudio_static.dir\Debug\pa_ringbuffer.obj
+         portaudio_static.dir\Debug\pa_stream.obj
+         portaudio_static.dir\Debug\pa_trace.obj
+         portaudio_static.dir\Debug\pa_asio.obj
+         portaudio_static.dir\Debug\pa_win_wmme.obj
+         portaudio_static.dir\Debug\pa_win_wasapi.obj
+         portaudio_static.dir\Debug\pa_win_wdmks.obj
+         portaudio_static.dir\Debug\pa_hostapi_skeleton.obj
+         portaudio_static.dir\Debug\pa_win_hostapis.obj
+         portaudio_static.dir\Debug\pa_win_util.obj
+         portaudio_static.dir\Debug\pa_win_waveformat.obj
+         portaudio_static.dir\Debug\pa_win_wdmks_utils.obj
+         portaudio_static.dir\Debug\pa_win_coinitialize.obj
+         portaudio_static.dir\Debug\pa_x86_plain_converters.obj
+         portaudio_static.dir\Debug\asio.obj
+         portaudio_static.dir\Debug\asiolist.obj
+         portaudio_static.dir\Debug\asiodrivers.obj
+         portaudio_static.vcxproj -> H:\VR\portaudio\bin\Debug\portaudio_static_x86.lib
+     1>Done Building Project "H:\VR\portaudio\bin\portaudio_static.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:14.08

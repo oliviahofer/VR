@@ -1,0 +1,180 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_allocation.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_converters.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_cpuload.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_debugprint.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_dither.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_front.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_process.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_ringbuffer.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_stream.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\common\pa_trace.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\hostapi\asio\pa_asio.cpp">
+      <Filter>hostapi\ASIO</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\hostapi\wmme\pa_win_wmme.c">
+      <Filter>hostapi\wmme</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\hostapi\wasapi\pa_win_wasapi.c">
+      <Filter>hostapi\wasapi</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\hostapi\wdmks\pa_win_wdmks.c">
+      <Filter>hostapi\wdmks</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\hostapi\skeleton\pa_hostapi_skeleton.c">
+      <Filter>hostapi\skeleton</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\os\win\pa_win_hostapis.c">
+      <Filter>os\win</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\os\win\pa_win_util.c">
+      <Filter>os\win</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\os\win\pa_win_waveformat.c">
+      <Filter>os\win</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\os\win\pa_win_wdmks_utils.c">
+      <Filter>os\win</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\os\win\pa_win_coinitialize.c">
+      <Filter>os\win</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\portaudio\src\os\win\pa_x86_plain_converters.c">
+      <Filter>os\win</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\ASIOSDK\common\asio.cpp">
+      <Filter>hostapi\ASIO\ASIOSDK</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\ASIOSDK\host\pc\asiolist.cpp">
+      <Filter>hostapi\ASIO\ASIOSDK</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\VR\ASIOSDK\host\asiodrivers.cpp">
+      <Filter>hostapi\ASIO\ASIOSDK</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="H:\VR\portaudio\include\portaudio.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\include\pa_asio.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\include\pa_win_wmme.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\include\pa_win_wasapi.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\include\pa_win_wdmks.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_allocation.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_converters.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_cpuload.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_debugprint.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_dither.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_endianness.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_hostapi.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_memorybarrier.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_process.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_ringbuffer.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_stream.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_trace.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_types.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\src\common\pa_util.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="H:\VR\portaudio\bin\options_cmake.h">
+      <Filter>cmake_generated</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="H:\VR\portaudio\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="hostapi\ASIO\ASIOSDK">
+      <UniqueIdentifier>{B0C72D04-EB68-4278-B75F-4FCC5F47425C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="os\win">
+      <UniqueIdentifier>{0134ACC3-AF4A-4F03-8B9A-79322402164C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="hostapi\ASIO">
+      <UniqueIdentifier>{D0EDB217-E05D-447F-9570-9131CB55E7BD}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="hostapi\wmme">
+      <UniqueIdentifier>{050D4730-6B08-4090-832C-E44D5B778AD9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="hostapi\wasapi">
+      <UniqueIdentifier>{DD0FC898-2AC4-4BE7-84EC-46AFC501F84E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="hostapi\wdmks">
+      <UniqueIdentifier>{777EE52A-73DD-4602-9513-C8AF59E0BDDC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="hostapi\skeleton">
+      <UniqueIdentifier>{9074496B-DAAA-4ABE-8BD8-1C1C430061AA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="hostapi">
+      <UniqueIdentifier>{4A29ACEC-694C-4076-82C4-7D40B26576DA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{5C06BBF8-A976-4F87-93B7-60BF16D05353}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common">
+      <UniqueIdentifier>{76950BA4-29BF-4483-96E3-877ED36D0DB0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="cmake_generated">
+      <UniqueIdentifier>{0DA89045-0337-4256-BC6C-18A68430E1C3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="os">
+      <UniqueIdentifier>{F0C65197-EBA1-4B48-86E0-E4D6AE1C7870}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

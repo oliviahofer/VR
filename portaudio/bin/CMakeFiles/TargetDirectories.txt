@@ -1,0 +1,4 @@
+H:/VR/portaudio/bin/CMakeFiles/ALL_BUILD.dir
+H:/VR/portaudio/bin/CMakeFiles/portaudio_static.dir
+H:/VR/portaudio/bin/CMakeFiles/portaudio.dir
+H:/VR/portaudio/bin/CMakeFiles/ZERO_CHECK.dir
