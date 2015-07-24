@@ -3,54 +3,158 @@
 #include <cmath>
 #include <iostream>
 #include <ios>
-
+//OpenSG includes
 #include <OpenSG/OSGGLUT.h>
 #include <OpenSG/OSGConfig.h>
-#include <OpenSG/OSGSimpleGeometry.h>
-#include <OpenSG/OSGGLUTWindow.h>
 #include <OpenSG/OSGMultiDisplayWindow.h>
 #include <OpenSG/OSGSceneFileHandler.h>
-
+#include <OpenSG/OSGGLUTWindow.h>
+//FOR CREATING CHILD NODES
+#include <OpenSG/OSGSimpleGeometry.h>
+#include <OpenSG/OSGSimpleGeometry.h>
+#include <OpenSG/OSGNameAttachment.h>
+//FOR TRANSFORMATIONS
+#include <OpenSG/OSGComponentTransform.h>
+//FOR COLOR
+#include <OpenSG/OSGMaterialGroup.h>
+#include <OpenSG/OSGImage.h>
+#include <OpenSG/OSGSimpleTexturedMaterial.h>
+//FOR CAVESCEBEMANAGER
 #include <OSGCSM/OSGCAVESceneManager.h>
 #include <OSGCSM/OSGCAVEConfig.h>
 #include <OSGCSM/appctrl.h>
-
+//FOR TRACKING
 #include <vrpn_Tracker.h>
 #include <vrpn_Button.h>
 #include <vrpn_Analog.h>
-
+//For AUDIO
 #include "portaudio.h"
+//using namespace std;
 
-OSG_USING_NAMESPACE
+OSG_USING_NAMESPACE // activate the OpenSG namespace
 
+#include <complex>
+#include <iostream>
+#include <valarray>
+
+ 
+const double PI = 3.141592653589793238460;
+ 
+typedef std::complex<double> Complex;
+typedef std::valarray<Complex> CArray;
+ 
+// Cooley–Tukey FFT (in-place, divide-and-conquer)
+// Higher memory requirements and redundancy although more intuitive
+void fft(CArray& x)
+{
+    const size_t N = x.size();
+    if (N <= 1) return;
+ 
+    // divide
+    CArray even = x[std::slice(0, N/2, 2)];
+    CArray  odd = x[std::slice(1, N/2, 2)];
+ 
+    // conquer
+    fft(even);
+    fft(odd);
+ 
+    // combine
+    for (size_t k = 0; k < N/2; ++k)
+    {
+        Complex t = std::polar(1.0, -2 * PI * k / N) * odd[k];
+        x[k    ] = even[k] + t;
+        x[k+N/2] = even[k] - t;
+    }
+}
+ 
+// Cooley-Tukey FFT (in-place, breadth-first, decimation-in-frequency)
+// Better optimized but less intuitive
+/*void fft(CArray &x)
+{
+	// DFT
+	unsigned int N = x.size(), k = N, n;
+	double thetaT = 3.14159265358979323846264338328L / N;
+	Complex phiT = Complex(cos(thetaT), sin(thetaT)), T;
+	while (k > 1)
+	{
+		n = k;
+		k >>= 1;
+		phiT = phiT * phiT;
+		T = 1.0L;
+		for (unsigned int l = 0; l < k; l++)
+		{
+			for (unsigned int a = l; a < N; a += n)
+			{
+				unsigned int b = a + k;
+				Complex t = x[a] - x[b];
+				x[a] += x[b];
+				x[b] = t * T;
+			}
+			T *= phiT;
+		}
+	}
+	// Decimate
+	unsigned int m = (unsigned int)log2(N);
+	for (unsigned int a = 0; a < N; a++)
+	{
+		unsigned int b = a;
+		// Reverse bits
+		b = (((b & 0xaaaaaaaa) >> 1) | ((b & 0x55555555) << 1));
+		b = (((b & 0xcccccccc) >> 2) | ((b & 0x33333333) << 2));
+		b = (((b & 0xf0f0f0f0) >> 4) | ((b & 0x0f0f0f0f) << 4));
+		b = (((b & 0xff00ff00) >> 8) | ((b & 0x00ff00ff) << 8));
+		b = ((b >> 16) | (b << 16)) >> (32 - m);
+		if (b > a)
+		{
+			Complex t = x[a];
+			x[a] = x[b];
+			x[b] = t;
+		}
+	}
+	// Normalize
+	Complex f = 1.0 / sqrt(N);
+	for (unsigned int i = 0; i < N; i++)
+		x[i] *= f;
+}*/
+
+
+//------------------------------------------------------------------------------
+// Global Variables
+//------------------------------------------------------------------------------
 OSGCSM::CAVEConfig cfg;
-OSGCSM::CAVESceneManager *mgr = nullptr;
-vrpn_Tracker_Remote* tracker =  nullptr;
+OSGCSM::CAVESceneManager *mgr = nullptr; // the CaveSceneManager to manage applications
+vrpn_Tracker_Remote* tracker =  nullptr; // tracking
 vrpn_Button_Remote* button = nullptr;
 vrpn_Analog_Remote* analog = nullptr;
+NodeRecPtr scene;
+NodeRecPtr buuble;
+
 //Audio
-#define SAMPLE_RATE (44100)
+#define NUM_CHANNELS		(1)
+#define SAMPLE_RATE			(44100)
+#define FRAMES_PER_BUFFER	(1024)
+#define SAMPLE_FORMAT		(paFloat32)
+#define BUBBLES_PER_SECOND	(1)
+bool blowing = false;
 PaStream *stream;
 PaError err;
+int counter = 0;
 
-void cleanup()
-{
-	delete mgr;
-	delete tracker;
-	delete button;
-	delete analog;
-	err = Pa_Terminate();
-	if( err != paNoError ) printf(  "PortAudio Pa_Terminate() error: %s\n", Pa_GetErrorText( err ) );
-
-}
-
+//------------------------------------------------------------------------------
+// Forward Declarations
+//------------------------------------------------------------------------------
+// forward declaration so we can have the interesting parts upfront
+void setupGLUT(int *argc, char *argv[]);
 void print_tracker();
+NodeRecPtr createBubble();
+void cleanup(); //cleanup the used modules and databases
 
-// Callback Function for PortAudio
-/* This routine will be called by the PortAudio engine when audio is needed.
-   It may called at interrupt level on some machines so don't do anything
-   that could mess up the system like calling malloc() or free().
-*/ 
+
+//------------------------------------------------------------------------------
+// PortAudio
+//------------------------------------------------------------------------------
+
+
 static int patestCallback( const void *inputBuffer, void *outputBuffer,
                            unsigned long framesPerBuffer,
                            const PaStreamCallbackTimeInfo* timeInfo,
@@ -58,16 +162,21 @@ static int patestCallback( const void *inputBuffer, void *outputBuffer,
                            void *userData )
 {
 	float *in = (float*)inputBuffer;
-	unsigned int i;
 	(void) outputBuffer;  /* Prevent unused variable warning. */
+	(void) userData;
+	unsigned int i;
 
 	for ( i=0; i<framesPerBuffer; i++ ){
-		printf(  "patestCallback: %f\n", in[i] );	
+		if (in[i] >0.5) {
+			//printf(  "patestCallback: %f\n", in[i] );
+			blowing = true;
+		} else {
+			blowing = false;
+		}
 	}
 
     return 0;
 }
-
 
 int setupPortAudio() {
 
@@ -77,29 +186,22 @@ int setupPortAudio() {
 
     /* Open an audio I/O stream. */
     err = Pa_OpenDefaultStream( &stream,
-                                1,          /* one input channel */
-                                0,          /* no output */
-                                paFloat32,  /* 32 bit floating point output */
-                                SAMPLE_RATE,
-                                256,        /* frames per buffer, i.e. the number
-                                                   of sample frames that PortAudio will
-                                                   request from the callback. Many apps
-                                                   may want to use
-                                                   paFramesPerBufferUnspecified, which
-                                                   tells PortAudio to pick the best,
-                                                   possibly changing, buffer size.*/
-                                patestCallback, /* this is your callback function */
-                                NULL ); /* no data to pass */
+                                NUM_CHANNELS,		/* one input channel */
+                                0,					/* no output */
+                                SAMPLE_FORMAT,		/* sample format */
+                                SAMPLE_RATE,		/* sample rate */
+								FRAMES_PER_BUFFER,	/* frames per buffer*/
+                                patestCallback,		/* this is your callback function */
+                                NULL);				/* no data to pass */
     if( err != paNoError ) printf(  "PortAudio Pa_OpenDefaultStream() error: %s\n", Pa_GetErrorText( err ) );
 
 	return err;
 }
 
-NodeTransitPtr buildScene()
-{
-	// you will see a donut at the floor, slightly skewed, depending on head_position
-	return makeTorus(10.f, 50.f, 32.f, 64.f);
-}
+
+//------------------------------------------------------------------------------
+// Tracking
+//------------------------------------------------------------------------------
 
 template<typename T>
 T scale_tracker2cm(const T& value)
@@ -108,8 +210,11 @@ T scale_tracker2cm(const T& value)
 	return value * scale;
 }
 
-auto head_orientation = Quaternion(Vec3f(0.f, 1.f, 0.f), 3.141f);
+//auto head_orientation = Quaternion(Vec3f(0.f, 1.f, 0.f), 3.141f);
+//auto head_position = Vec3f(0.f, 170.f, 200.f);	// a 1.7m Person 2m in front of the scene
+auto head_orientation = Quaternion(Vec3f(0.f, 1.f, 0.f), 3.14f);
 auto head_position = Vec3f(0.f, 170.f, 200.f);	// a 1.7m Person 2m in front of the scene
+
 
 void VRPN_CALLBACK callback_head_tracker(void* userData, const vrpn_TRACKERCB tracker)
 {
@@ -170,10 +275,89 @@ void check_tracker()
 
 void print_tracker()
 {
-	std::cout << "Head position: " << head_position << " orientation: " << head_orientation << '\n';
+	std::cout << "Head position: " << head_position << " orientation: " << head_orientation << " orientation(Deg): " << head_orientation.w() << '\n';
 	std::cout << "Wand position: " << wand_position << " orientation: " << wand_orientation << '\n';
 	std::cout << "Analog: " << analog_values << '\n';
 }
+
+//------------------------------------------------------------------------------
+// buildScene
+//------------------------------------------------------------------------------
+NodeRecPtr createBubble() {
+	//printf(  "createBubble \n" );
+
+	//NodeRecPtr bubble = makeSphere(2,3);
+	GeometryRecPtr bubbleGeo = makeSphereGeo(2, 3);
+	NodeRecPtr bubble = Node::create();
+	bubble->setCore(bubbleGeo);
+
+    // component transform ************************************
+    
+    //this one is declared globally
+    ComponentTransformRecPtr ct = ComponentTransform::create();
+	
+	try{
+		// calculate direction ************************************
+
+		// calculate orthogonal vector on head_orientation vector (always in x,y plain
+		Vec3f v = (Vec3f(head_orientation.x(), head_orientation.y(), head_orientation.z())).cross(Vec3f(0,0,1));
+		// turn vector the same angle the orientation vector is turned around the y axis
+		double alpha = head_orientation.w()+180;
+		Vec3f direction = Vec3f( cos(alpha)*v.x() + -sin(alpha)*v.z() , v.y() , sin(alpha)*v.x() + cos(alpha)*v.z());
+
+		// calculate direction ************************************
+
+		print_tracker();
+		std::cout << "Orthogonal vector: " << v << " direction: " << direction << '\n';
+
+		Vec3f pos = Vec3f(0.f, 170.f, 240.f);
+		ct->setTranslation(Vec3f(head_position) + direction*50 );
+	}
+	catch(const std::exception& e)
+	{
+		printf("calculating head_position failed \n");
+	}
+
+	NodeRecPtr bubbleTrans = Node::create();
+	bubbleTrans->setCore(ct);
+	bubbleTrans->addChild(bubble);
+   
+    // end component transform ********************************
+
+	setName(bubbleGeo, "bubbleGeo");
+	setName(bubble, "bubble");
+	setName(bubbleTrans, "bubbleTrans");
+	
+	return bubbleTrans;
+}
+
+NodeTransitPtr buildScene()
+{
+	NodeRecPtr scene = Node::create();
+	setName(scene, "scene");
+	scene->setCore(Group::create());
+
+	//Make Ground
+	NodeRecPtr ground = makePlane(200.f, 200.f, 1, 1);
+	setName(ground, "ground");
+	//But it to our Feet
+	ComponentTransformRecPtr ct = ComponentTransform::create();
+	setName(ct, "ct");
+	//ct->setTranslation(Vec3f(0,-2,0));
+	ct->setRotation(Quaternion(Vec3f(1,0,0),osgDegree2Rad(90)));
+	NodeRecPtr groundTrans = Node::create();
+	setName(groundTrans, "groundTrans");
+	groundTrans->setCore(ct);
+	groundTrans->addChild(ground);
+	//Add it to Root
+	scene->addChild(groundTrans);
+
+	return NodeTransitPtr(scene);
+}
+
+//------------------------------------------------------------------------------
+// Keyboard Input
+//------------------------------------------------------------------------------
 
 void keyboard(unsigned char k, int x, int y)
 {
@@ -204,10 +388,13 @@ void keyboard(unsigned char k, int x, int y)
 			break;
 		case 'c' : // create
 			// Start PortAudio Stream
-			err = Pa_StartStream( stream ); // or Pa_StopStream( stream );
+			scene->addChild(createBubble());
+			err = Pa_StartStream( stream ); 
 			if( err != paNoError ) printf(  "PortAudio Pa_StartStream() error: %s\n", Pa_GetErrorText( err ) );
+			//Pa_IsStreamActive
 		break;
 		case 's' : //stop
+			//myfile.close();
 			// Stop PortAudio Stream
 			err = Pa_AbortStream( stream ); // or Pa_StopStream( stream );
 			if( err != paNoError ) printf(  "PortAudio Pa_StopStream() error: %s\n", Pa_GetErrorText( err ) );	 
@@ -217,35 +404,9 @@ void keyboard(unsigned char k, int x, int y)
 	}
 }
 
-void setupGLUT(int *argc, char *argv[])
-{
-	glutInit(argc, argv);
-	glutInitDisplayMode(GLUT_RGB  |GLUT_DEPTH | GLUT_DOUBLE);
-	glutCreateWindow("OpenSG CSMDemo with VRPN API");
-	glutDisplayFunc([]()
-	{
-		// black navigation window
-		glClear(GL_COLOR_BUFFER_BIT);
-		glutSwapBuffers();
-	});
-	glutReshapeFunc([](int w, int h)
-	{
-		mgr->resize(w, h);
-		glutPostRedisplay();
-	});
-	glutKeyboardFunc(keyboard);
-	glutIdleFunc([]()
-	{
-		check_tracker();
-		const auto speed = 1.f;
-		mgr->setUserTransform(head_position, head_orientation);
-		mgr->setTranslation(mgr->getTranslation() + speed * analog_values);
-		commitChanges();
-		mgr->redraw();
-		// the changelist should be cleared - else things could be copied multiple times
-		OSG::Thread::getCurrentChangeList()->clear();
-	});
-}
+//------------------------------------------------------------------------------
+// MAIN
+//------------------------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
@@ -257,7 +418,7 @@ int main(int argc, char **argv)
 	{
 
 		bool cfgIsSet = false;
-		NodeRefPtr scene = nullptr;
+		scene = nullptr;
 
 		// ChangeList needs to be set for OpenSG 1.4
 		ChangeList::setReadWriteDefault();
@@ -332,4 +493,82 @@ int main(int argc, char **argv)
 	}
 
 	glutMainLoop();
+}
+
+//------------------------------------------------------------------------------
+// GLUT
+//------------------------------------------------------------------------------
+
+OSG::Action::ResultE enter(OSG::Node * const node)
+{
+	if(strcmp(getName(node),"bubbleTrans") == 0)
+    {
+        //move bubble
+		//printf(  "moveBubble \n" );
+        //ct->setTranslation(OSG::Vec3f(0,cos(time/2000.f)*100,200)); 
+
+		Real32 time = glutGet(GLUT_ELAPSED_TIME);
+
+		ComponentTransformRecPtr bt = dynamic_cast<ComponentTransform*>(node->getCore());
+		Vec3f vec = bt->getTranslation();
+		Vec3f vec2 = vec + Vec3f(0,0.01,0);
+		//bt->setTranslation( vec2 ); //MOVE
+
+		//bt->setTranslation(Vec3f(1,0.01*time,1));
+		//bt->setRotation(Quaternion(Vec3f(1,0,0),osgDegree2Rad(270)+0.001f*time));
+		//bt->setScale(Vec3f(0.001,0.001,0.001));
+
+    } 
+
+    return OSG::Action::Continue; 
+}
+
+void setupGLUT(int *argc, char *argv[])
+{
+	glutInit(argc, argv);
+	glutInitDisplayMode(GLUT_RGB  |GLUT_DEPTH | GLUT_DOUBLE);
+	glutCreateWindow("OpenSG CSMDemo with VRPN API");
+	glutDisplayFunc([]()
+	{
+		// black navigation window
+		glClear(GL_COLOR_BUFFER_BIT);
+		glutSwapBuffers();
+	});
+	glutReshapeFunc([](int w, int h)
+	{
+		mgr->resize(w, h);
+		glutPostRedisplay();
+	});
+	glutKeyboardFunc(keyboard);
+	glutIdleFunc([]()
+	{
+		// Tracker
+		check_tracker();
+		const auto speed = 1.f;
+		mgr->setUserTransform(head_position, head_orientation);
+		mgr->setTranslation(mgr->getTranslation() + speed * analog_values);
+		// Bubbles
+		//if (blowing ) scene->addChild(createBubble());	// create Bubble
+		traverse(scene, enter);			// traverse Scenegraph
+		commitChanges();
+		mgr->redraw();
+		// the changelist should be cleared - else things could be copied multiple times
+		OSG::Thread::getCurrentChangeList()->clear();
+	});
+}
+
+//------------------------------------------------------------------------------
+// CLEANUP
+//------------------------------------------------------------------------------
+
+void cleanup()
+{
+	delete mgr;
+	delete tracker;
+	delete button;
+	delete analog;
+	scene = NULL;
+	err = Pa_Terminate();
+	if( err != paNoError ) printf(  "PortAudio Pa_Terminate() error: %s\n", Pa_GetErrorText( err ) );
+
 }
