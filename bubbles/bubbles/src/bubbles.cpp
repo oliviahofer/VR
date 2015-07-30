@@ -16,6 +16,9 @@
 #include <OpenSG/OSGNameAttachment.h>
 //FOR TRANSFORMATIONS
 #include <OpenSG/OSGComponentTransform.h>
+//FOR SHADER
+#include <OpenSG/OSGShaderProgramChunk.h>
+#include <OpenSG/OSGShaderProgram.h>
 //FOR COLOR
 #include <OpenSG/OSGMaterialGroup.h>
 #include <OpenSG/OSGImage.h>
@@ -44,7 +47,56 @@ const double PI = 3.141592653589793238460;
 typedef std::complex<double> Complex;
 typedef std::valarray<Complex> CArray;
 
+static std::string _vertex_shader =
+"\n"
+"varying vec3 ViewDirection;\n"
+"varying vec3 fvObjectPosition;\n"
+"varying vec3 Normal;\n"
+"   \n"
+"void main( void )\n"
+"{\n"
+"   gl_Position = ftransform();\n"
+"    \n"
+"   fvObjectPosition = vec3(gl_ModelViewMatrix * gl_Vertex);\n"
+"   \n"
+"   ViewDirection  = - fvObjectPosition.xyz;\n"
+"   Normal         = gl_NormalMatrix * gl_Normal;\n"
+"   gl_FrontColor  = gl_FrontMaterial.diffuse;\n"
+"   \n"
+"}\n";
 
+static std::string _fragment_shader =
+"vec4 fvAmbient  = vec4(0.36, 0.36, 0.36, 1.0);\n"
+"vec4 fvSpecular = vec4(0.7,  0.7,  0.7,  1.0);\n"
+"vec4 fvDiffuse  = vec4(0.5,  0.5,  0.5,  1.0);\n"
+"float fSpecularPower = 25.0;\n"
+"\n"
+"uniform sampler2D baseMap;\n"
+"uniform int useTexture;\n"
+"\n"
+"varying vec2 Texcoord;\n"
+"varying vec3 ViewDirection;\n"
+"varying vec3 fvObjectPosition;\n"
+"varying vec3 Normal;\n"
+"\n"
+"void main( void )\n"
+"{\n"
+"   vec3  fvLightDirection = normalize( gl_LightSource[0].position.xyz - fvObjectPosition.xyz);\n"
+"   vec3  fvNormal         = normalize( Normal );\n"
+"   float fNDotL           = dot( fvNormal, fvLightDirection ); \n"
+"   \n"
+"   vec3  fvReflection     = normalize( ( ( 2.0 * fvNormal ) * fNDotL ) - fvLightDirection ); \n"
+"   vec3  fvViewDirection  = normalize( ViewDirection );\n"
+"   float fRDotV           = max( 0.0, dot( fvReflection, fvViewDirection ) );\n"
+"   \n"
+"   vec4  fvBaseColor      = gl_Color;\n"
+"   \n"
+"   vec4  fvTotalAmbient   = fvAmbient * fvBaseColor; \n"
+"   vec4  fvTotalDiffuse   = fvDiffuse * fNDotL * fvBaseColor; \n"
+"   vec4  fvTotalSpecular  = fvSpecular * ( pow( fRDotV, fSpecularPower ) );\n"
+"  \n"
+"   gl_FragColor = ( fvTotalAmbient + fvTotalDiffuse + fvTotalSpecular );\n"
+"}\n";
 
  
 // Cooley–Tukey FFT (in-place, divide-and-conquer)
@@ -296,6 +348,28 @@ NodeRecPtr createBubble(float radius) {
 	NodeRecPtr bubble = Node::create();
 	bubble->setCore(bubbleGeo);
 
+	// shader ************************************
+
+	OSG::ChunkMaterialUnrecPtr cmat = OSG::ChunkMaterial::create();
+	OSG::ShaderProgramChunkUnrecPtr shl = OSG::ShaderProgramChunk::create();
+
+	// Vertex Shader
+	OSG::ShaderProgramUnrecPtr shl_vp = OSG::ShaderProgram::createVertexShader();
+	/*if(!shl_vp->readProgram("models/vertex.vp"))
+		fprintf(stderr, "Couldn't read vertex program 'vertex.vp'\n");*/
+    shl_vp->setProgram(_vertex_shader);
+    shl->addShader(shl_vp);
+
+	// Fragment Shader
+	OSG::ShaderProgramUnrecPtr shl_fp = OSG::ShaderProgram::createFragmentShader();
+	/*if(!shl_fp->readProgram("models/fragment.fp"))
+        fprintf(stderr, "Couldn't read fragment program 'fragment.fp'\n");*/
+    shl_fp->setProgram(_fragment_shader);
+    shl->addShader(shl_fp);
+
+	cmat->addChunk(shl);
+	bubbleGeo->setMaterial(cmat);
+
     // component transform ************************************
     
     //this one is declared globally
@@ -331,7 +405,7 @@ NodeRecPtr createBubble(float radius) {
 	setName(bubbleGeo, "bubbleGeo");
 	setName(bubble, "bubble");
 	setName(bubbleTrans, nodeName);
-	
+
 	return bubbleTrans;
 }
 
@@ -589,7 +663,7 @@ OSG::Action::ResultE enter(OSG::Node * const node)
 			std::string nodeName = "bubbleTrans:" + std::to_string(direction.x()) + ":" + std::to_string(direction.y()) + ":" + std::to_string(direction.z())+ ":" + std::to_string(v)+ ":" + std::to_string(ttl);
 			setName(node, nodeName);
 
-			std::cout << "nodePositions Size: " << nodePositions.size()  <<" \n";
+			//std::cout << "nodePositions Size: " << nodePositions.size()  <<" \n";
 		}
 		else {
 			nodesToRemove.push_back(node);
