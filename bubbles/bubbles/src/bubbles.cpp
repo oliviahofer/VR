@@ -350,25 +350,37 @@ NodeRecPtr createBubble(float radius) {
 
 	// shader ************************************
 
-	OSG::ChunkMaterialUnrecPtr cmat = OSG::ChunkMaterial::create();
+	/*OSG::ChunkMaterialUnrecPtr cmat = OSG::ChunkMaterial::create();
 	OSG::ShaderProgramChunkUnrecPtr shl = OSG::ShaderProgramChunk::create();
 
 	// Vertex Shader
 	OSG::ShaderProgramUnrecPtr shl_vp = OSG::ShaderProgram::createVertexShader();
 	/*if(!shl_vp->readProgram("models/vertex.vp"))
 		fprintf(stderr, "Couldn't read vertex program 'vertex.vp'\n");*/
-    shl_vp->setProgram(_vertex_shader);
+    /*shl_vp->setProgram(_vertex_shader);
     shl->addShader(shl_vp);
 
 	// Fragment Shader
-	OSG::ShaderProgramUnrecPtr shl_fp = OSG::ShaderProgram::createFragmentShader();
+	/*OSG::ShaderProgramUnrecPtr shl_fp = OSG::ShaderProgram::createFragmentShader();
 	/*if(!shl_fp->readProgram("models/fragment.fp"))
         fprintf(stderr, "Couldn't read fragment program 'fragment.fp'\n");*/
-    shl_fp->setProgram(_fragment_shader);
+    /*shl_fp->setProgram(_fragment_shader);
     shl->addShader(shl_fp);
 
 	cmat->addChunk(shl);
-	bubbleGeo->setMaterial(cmat);
+	cmat->setTransparencyMode(0.25);
+	bubbleGeo->setMaterial(cmat); */
+	//now we create the texture that will hold the image
+
+	SimpleTexturedMaterialRecPtr tex = SimpleTexturedMaterial::create();
+	ImageRecPtr image = Image::create();
+	if(!image->read("rainbow.png"))
+    {
+        fprintf(stderr, "Couldn't read texture 'soap_bubbles.jpg'\n");
+    }
+	tex->setImage(image);
+	tex->setTransparency(0.8);
+	bubbleGeo->setMaterial(tex);
 
     // component transform ************************************
     
@@ -611,7 +623,7 @@ void detectCollisions(OSG::Node * const currentNode, Vec3f currentPosition, floa
 
 				float distance = std::sqrt(xd*xd + yd*yd + zd*zd);
 				if( (std::abs(distance)) > ( (1/currentRadius)*(1/currentRadius)*(1/currentRadius) + (1/radius)*(1/radius)*(1/radius)) ){
-					std::cout << "collisionDetected: \n";
+					//std::cout << "collisionDetected: \n";
 				}
 			}
 		}
