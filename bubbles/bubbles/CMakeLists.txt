@@ -26,6 +26,7 @@ add_project(opensg_trackd
 add_project(bubbles
 	SOURCES "src/bubbles.cpp"
 	CONFIGS "config/mono.csm"
+	IMAGES "images/*.*"
 	OPENSG_MODULES ${OPENSG_MODULES}
 	CSM_MODULE
 	VRPN_MODULE

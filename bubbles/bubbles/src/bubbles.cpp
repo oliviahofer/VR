@@ -3,6 +3,8 @@
 #include <cmath>
 #include <iostream>
 #include <ios>
+#include <complex>
+#include <valarray>
 #include <boost/algorithm/string.hpp>
 //OpenSG includes
 #include <OpenSG/OSGGLUT.h>
@@ -33,19 +35,8 @@
 #include <vrpn_Analog.h>
 //For AUDIO
 #include "portaudio.h"
-//using namespace std;
 
 OSG_USING_NAMESPACE // activate the OpenSG namespace
-
-#include <complex>
-#include <iostream>
-#include <valarray>
-
- 
-const double PI = 3.141592653589793238460;
- 
-typedef std::complex<double> Complex;
-typedef std::valarray<Complex> CArray;
 
 static std::string _vertex_shader =
 "\n"
@@ -98,6 +89,53 @@ static std::string _fragment_shader =
 "   gl_FragColor = ( fvTotalAmbient + fvTotalDiffuse + fvTotalSpecular );\n"
 "}\n";
 
+
+
+//------------------------------------------------------------------------------
+// Global Variables
+//------------------------------------------------------------------------------
+OSGCSM::CAVEConfig cfg;
+OSGCSM::CAVESceneManager *mgr = nullptr; // the CaveSceneManager to manage applications
+vrpn_Tracker_Remote* tracker =  nullptr; // tracking
+vrpn_Button_Remote* button = nullptr;
+vrpn_Analog_Remote* analog = nullptr;
+NodeRecPtr scene;
+NodeRecPtr buuble;
+std::list<NodeRecPtr> nodesToRemove;
+std::map <NodeRecPtr, std::tuple<OSG::Vec3f,float>> nodePositions;
+//Audio
+#define NUM_CHANNELS		(1)
+#define SAMPLE_RATE			(44100)
+#define FRAMES_PER_BUFFER	(1024)
+#define SAMPLE_FORMAT		(paFloat32)
+PaStream *stream; 
+PaError err;
+// FFT
+typedef std::complex<double> Complex;
+typedef std::valarray<Complex> CArray;
+// Modi
+std::tuple<boolean,float> blowing = std::tuple<boolean,float>(false,0.0);
+float frequency = 0;
+boolean mode = false; // False = create Bubbles, true = fft
+const double PI = 3.141592653589793238460;
+ 
+
+
+//------------------------------------------------------------------------------
+// Forward Declarations
+//------------------------------------------------------------------------------
+// forward declaration so we can have the interesting parts upfront
+void setupGLUT(int *argc, char *argv[]);
+void print_tracker();
+NodeRecPtr createBubble(float radius);
+void keyboard(unsigned char k, int x, int y);
+void cleanup(); //cleanup the used modules and databases
+
+
+//------------------------------------------------------------------------------
+// PortAudio
+//------------------------------------------------------------------------------
+
  
 // Cooley–Tukey FFT (in-place, divide-and-conquer)
 // Higher memory requirements and redundancy although more intuitive
@@ -122,97 +160,6 @@ void fft(CArray& x)
         x[k+N/2] = even[k] - t;
     }
 }
- 
-// Cooley-Tukey FFT (in-place, breadth-first, decimation-in-frequency)
-// Better optimized but less intuitive
-/*void fft(CArray &x)
-{
-	// DFT
-	unsigned int N = x.size(), k = N, n;
-	double thetaT = 3.14159265358979323846264338328L / N;
-	Complex phiT = Complex(cos(thetaT), sin(thetaT)), T;
-	while (k > 1)
-	{
-		n = k;
-		k >>= 1;
-		phiT = phiT * phiT;
-		T = 1.0L;
-		for (unsigned int l = 0; l < k; l++)
-		{
-			for (unsigned int a = l; a < N; a += n)
-			{
-				unsigned int b = a + k;
-				Complex t = x[a] - x[b];
-				x[a] += x[b];
-				x[b] = t * T;
-			}
-			T *= phiT;
-		}
-	}
-	// Decimate
-	unsigned int m = (unsigned int)log2(N);
-	for (unsigned int a = 0; a < N; a++)
-	{
-		unsigned int b = a;
-		// Reverse bits
-		b = (((b & 0xaaaaaaaa) >> 1) | ((b & 0x55555555) << 1));
-		b = (((b & 0xcccccccc) >> 2) | ((b & 0x33333333) << 2));
-		b = (((b & 0xf0f0f0f0) >> 4) | ((b & 0x0f0f0f0f) << 4));
-		b = (((b & 0xff00ff00) >> 8) | ((b & 0x00ff00ff) << 8));
-		b = ((b >> 16) | (b << 16)) >> (32 - m);
-		if (b > a)
-		{
-			Complex t = x[a];
-			x[a] = x[b];
-			x[b] = t;
-		}
-	}
-	// Normalize
-	Complex f = 1.0 / sqrt(N);
-	for (unsigned int i = 0; i < N; i++)
-		x[i] *= f;
-}*/
-
-
-//------------------------------------------------------------------------------
-// Global Variables
-//------------------------------------------------------------------------------
-OSGCSM::CAVEConfig cfg;
-OSGCSM::CAVESceneManager *mgr = nullptr; // the CaveSceneManager to manage applications
-vrpn_Tracker_Remote* tracker =  nullptr; // tracking
-vrpn_Button_Remote* button = nullptr;
-vrpn_Analog_Remote* analog = nullptr;
-NodeRecPtr scene;
-NodeRecPtr buuble;
-std::list<NodeRecPtr> nodesToRemove;
-std::map <NodeRecPtr, std::tuple<OSG::Vec3f,float>> nodePositions;
-//Calculating Perspective
-Vec3f direction =  Vec3f(0,0,0);
-//Audio
-#define NUM_CHANNELS		(1)
-#define SAMPLE_RATE			(44100)
-#define FRAMES_PER_BUFFER	(1024)
-#define SAMPLE_FORMAT		(paFloat32)
-#define BUBBLES_PER_SECOND	(1)
-std::tuple<boolean,float> blowing = std::tuple<boolean,float>(false,0.0);
-PaStream *stream;
-PaError err;
-int counter = 0;
-
-//------------------------------------------------------------------------------
-// Forward Declarations
-//------------------------------------------------------------------------------
-// forward declaration so we can have the interesting parts upfront
-void setupGLUT(int *argc, char *argv[]);
-void print_tracker();
-NodeRecPtr createBubble(float radius);
-void cleanup(); //cleanup the used modules and databases
-
-
-//------------------------------------------------------------------------------
-// PortAudio
-//------------------------------------------------------------------------------
-
 
 static int patestCallback( const void *inputBuffer, void *outputBuffer,
                            unsigned long framesPerBuffer,
@@ -225,13 +172,44 @@ static int patestCallback( const void *inputBuffer, void *outputBuffer,
 	(void) userData;
 	unsigned int i;
 
-	for ( i=0; i<framesPerBuffer; i++ ){
-		if (in[i] >0.5) {
-			//printf(  "patestCallback: %f\n", in[i] );
-			blowing = std::tuple<boolean, float>(true, in[i]);
-		} else {
-			blowing = std::tuple<boolean, float>(false, 0.0);
+	// creating bubbles
+	if (!mode){
+		for ( i=0; i<framesPerBuffer; i++ ){
+			if (in[i] >0.5) {
+				//printf(  "patestCallback: %f\n", in[i] );
+				blowing = std::tuple<boolean, float>(true, in[i]);
+			} else {
+				blowing = std::tuple<boolean, float>(false, 0.0);
+			}
 		}
+	}
+	// move bubbles according to pitch
+	else {
+
+		// Apply Han window
+		Complex test[FRAMES_PER_BUFFER];
+		for ( i=0; i<framesPerBuffer; i++ ){
+			test[i] = in[i] * (.5 * ( 1 - cos( 2 * PI * i / (FRAMES_PER_BUFFER-1.0) ) ));
+		}
+		CArray data(test, FRAMES_PER_BUFFER);
+
+		// FFT
+		fft(data);
+ 
+		// Find the peak
+		float maxVal = -1;
+		int maxIndex = -1;
+		for (int i = 0; i < FRAMES_PER_BUFFER ; ++i)
+		{
+			float x = sqrt(data[i].real() *data[i].real() + data[i].imag() *data[i].imag() );
+			if( x > maxVal){
+				maxVal = x;
+				maxIndex = i;
+			}
+		}
+
+		frequency = maxIndex*(SAMPLE_RATE/FRAMES_PER_BUFFER);
+		//std::cout <<  frequency << " " << std::endl;
 	}
 
     return 0;
@@ -269,7 +247,7 @@ T scale_tracker2cm(const T& value)
 	return value * scale;
 }
 
-auto head_orientation = Quaternion(Vec3f(0.f, 1.f, 0.5f), osgDegree2Rad(180));
+auto head_orientation = Quaternion(Vec3f(0.f, 1.f, 0.f), osgDegree2Rad(180));
 auto head_position = Vec3f(0.f, 170.f, 200.f);	// a 1.7m Person 2m in front of the scene
 
 void VRPN_CALLBACK callback_head_tracker(void* userData, const vrpn_TRACKERCB tracker)
@@ -331,7 +309,7 @@ void check_tracker()
 
 void print_tracker()
 {
-	std::cout << "Head position: " << head_position << " orientation: " << head_orientation << " orientation(Deg): " << head_orientation.w() << '\n';
+	std::cout << "Head position: " << head_position << " orientation: " << head_orientation << " orientation(Deg): " << osgRad2Degree(acos(head_orientation.w())*2)  << '\n';
 	std::cout << "Wand position: " << wand_position << " orientation: " << wand_orientation << '\n';
 	std::cout << "Analog: " << analog_values << '\n';
 
@@ -374,9 +352,9 @@ NodeRecPtr createBubble(float radius) {
 
 	SimpleTexturedMaterialRecPtr tex = SimpleTexturedMaterial::create();
 	ImageRecPtr image = Image::create();
-	if(!image->read("rainbow.png"))
+	if(!image->read("images/rainbow.png"))
     {
-        fprintf(stderr, "Couldn't read texture 'soap_bubbles.jpg'\n");
+        fprintf(stderr, "Couldn't read texture 'rainbow.png'\n");
     }
 	tex->setImage(image);
 	tex->setTransparency(0.8);
@@ -384,27 +362,29 @@ NodeRecPtr createBubble(float radius) {
 
     // component transform ************************************
     
-    //this one is declared globally
     ComponentTransformRecPtr ct = ComponentTransform::create();
+	Vec3f ray_direction = Vec3f(0,0,0);
 
-	
 	try{
-
 		// calculate orthogonal vector on head_orientation vector (always in y,z plane and in +z direction)
-		Vec3f v = Vec3f(1,0,0).cross(Vec3f(head_orientation.x(), head_orientation.y(), head_orientation.z()));
+		Vec3f ray_init_direction = Vec3f(1,0,0).cross(Vec3f(head_orientation.x(), head_orientation.y(), head_orientation.z()));
 		// turn vector the same angle the orientation vector is turned around the y axis
-		head_orientation.multVec(v, direction);
+		ray_init_direction.normalize();
+		head_orientation.multVec(ray_init_direction, ray_direction);
+		OSG::Line ray = Line(head_position + mgr->getTranslation(), ray_direction);
+		//NodeRecPtr line = make
+		//scene->addChild(ray);
 
 		// + mgr->getTranslation() ?
-		ct->setTranslation(head_position + direction*30 );
+		ct->setTranslation(head_position + mgr->getTranslation() + ray_direction*30 );
 
 		print_tracker();
-		std::cout << "Orthogonal vector: " << v << " direction: " << direction << '\n';
+		std::cout << "Orthogonal vector: " << ray_init_direction << " direction: " << ray_direction << '\n';
 
 	}
 	catch(const std::exception& e)
 	{
-		printf("calculating head_position failed \n");
+		printf("calculating ray_direction failed \n");
 	}
 
 	NodeRecPtr bubbleTrans = Node::create();
@@ -412,7 +392,7 @@ NodeRecPtr createBubble(float radius) {
 	bubbleTrans->addChild(bubble);
    
     // end component transform ********************************
-	std::string nodeName = "bubbleTrans:" + std::to_string(direction.x()) + ":" + std::to_string(direction.y()) + ":" + std::to_string(direction.z())+ ":" + std::to_string(radius)+ ":" + std::to_string(glutGet(GLUT_ELAPSED_TIME));
+	std::string nodeName = "bubbleTrans:" + std::to_string(ray_direction.x()) + ":" + std::to_string(ray_direction.y()) + ":" + std::to_string(ray_direction.z())+ ":" + std::to_string(radius)+ ":" + std::to_string(glutGet(GLUT_ELAPSED_TIME));
 
 	setName(bubbleGeo, "bubbleGeo");
 	setName(bubble, "bubble");
@@ -445,145 +425,6 @@ NodeTransitPtr buildScene()
 	return NodeTransitPtr(scene);
 }
 
-//------------------------------------------------------------------------------
-// Keyboard Input
-//------------------------------------------------------------------------------
-
-void keyboard(unsigned char k, int x, int y)
-{
-	Real32 ed;
-	switch(k)
-	{
-		case 'q':
-		case 27: 
-			cleanup();
-			exit(EXIT_SUCCESS);
-			break;
-		case 'e':
-			ed = mgr->getEyeSeparation() * .9f;
-			std::cout << "Eye distance: " << ed << '\n';
-			mgr->setEyeSeparation(ed);
-			break;
-		case 'E':
-			ed = mgr->getEyeSeparation() * 1.1f;
-			std::cout << "Eye distance: " << ed << '\n';
-			mgr->setEyeSeparation(ed);
-			break;
-		case 'h':
-			cfg.setFollowHead(!cfg.getFollowHead());
-			std::cout << "following head: " << std::boolalpha << cfg.getFollowHead() << '\n';
-			break;
-		case 'i':
-			print_tracker();
-			break;
-		case 'c' : // create
-			// Start PortAudio Stream
-			//scene->addChild(createBubble());
-			err = Pa_StartStream( stream ); 
-			if( err != paNoError ) printf(  "PortAudio Pa_StartStream() error: %s\n", Pa_GetErrorText( err ) );
-			//Pa_IsStreamActive
-		break;
-		case 's' : //stop
-			//myfile.close();
-			// Stop PortAudio Stream
-			err = Pa_AbortStream( stream ); // or Pa_StopStream( stream );
-			if( err != paNoError ) printf(  "PortAudio Pa_StopStream() error: %s\n", Pa_GetErrorText( err ) );	 
-		break;
-		default:
-			std::cout << "Key '" << k << "' ignored\n";
-	}
-}
-
-//------------------------------------------------------------------------------
-// MAIN
-//------------------------------------------------------------------------------
-
-int main(int argc, char **argv)
-{
-#if WIN32
-	OSG::preloadSharedObject("OSGFileIO");
-	OSG::preloadSharedObject("OSGImageFileIO");
-#endif
-	try
-	{
-
-		bool cfgIsSet = false;
-		scene = nullptr;
-
-		// ChangeList needs to be set for OpenSG 1.4
-		ChangeList::setReadWriteDefault();
-		osgInit(argc,argv);
-
-		// evaluate intial params
-		for(int a=1 ; a<argc ; ++a)
-		{
-			if( argv[a][0] == '-' )
-			{
-				if ( strcmp(argv[a],"-f") == 0 ) 
-				{
-					char* cfgFile = argv[a][2] ? &argv[a][2] : &argv[++a][0];
-					if (!cfg.loadFile(cfgFile)) 
-					{
-						std::cout << "ERROR: could not load config file '" << cfgFile << "'\n";
-						return EXIT_FAILURE;
-					}
-					cfgIsSet = true;
-				}
-			} else {
-				std::cout << "Loading scene file '" << argv[a] << "'\n";
-				scene = SceneFileHandler::the()->read(argv[a], NULL);
-			}
-		}
-
-		// load the CAVE setup config file if it was not loaded already:
-		if (!cfgIsSet) 
-		{
-			const char* const default_config_filename = "config/mono.csm";
-			if (!cfg.loadFile(default_config_filename)) 
-			{
-				std::cout << "ERROR: could not load default config file '" << default_config_filename << "'\n";
-				return EXIT_FAILURE;
-			}
-		}
-
-		cfg.printConfig();
-
-		// start servers for video rendering
-		if ( startServers(cfg) < 0 ) 
-		{
-			std::cout << "ERROR: Failed to start servers\n";
-			return EXIT_FAILURE;
-		}
-
-		setupGLUT(&argc, argv);
-
-		InitTracker(cfg);
-
-		setupPortAudio();
-
-
-		MultiDisplayWindowRefPtr mwin = createAppWindow(cfg, cfg.getBroadcastaddress());
-
-		if (!scene) 
-			scene = buildScene();
-		commitChanges();
-
-
-		mgr = new OSGCSM::CAVESceneManager(&cfg);
-		mgr->setWindow(mwin );
-		mgr->setRoot(scene);
-		mgr->showAll();
-		mgr->getWindow()->init();
-		mgr->turnWandOff();
-	}
-	catch(const std::exception& e)
-	{
-		std::cout << "ERROR: " << e.what() << '\n';
-		return EXIT_FAILURE;
-	}
-
-	glutMainLoop();
-}
 
 //------------------------------------------------------------------------------
 // GLUT
@@ -701,6 +542,35 @@ void removeOldBubbles() {
 	nodesToRemove.clear();
 }
 
+OSG::Action::ResultE moveBubbles(OSG::Node * const node) {
+	const char *name = getName(node);
+
+	if(isBubbleTrans(name))
+    {
+		Real32 time = glutGet(GLUT_ELAPSED_TIME);
+		std::vector<std::string> properties = getProperties(name);
+		float v = std::stof( properties[4] );
+		float x = 0;
+		float y = ( frequency - 330 ) *0.001 * ( v/20 );  // 330 = e
+		float z = 0;
+
+		ComponentTransformRecPtr bt = dynamic_cast<ComponentTransform*>(node->getCore());
+
+		Vec3f vec = bt->getTranslation();
+		Vec3f direction = OSG::Vec3f( x , y ,z );
+		Vec3f vec2 = vec + direction;
+
+
+		bt->setTranslation( vec2 ); //MOVE
+
+		if ( vec.y() <v/2 ) {
+			direction = OSG::Vec3f( 0 , 0 , 0 );
+		}
+    } 
+
+    return OSG::Action::Continue; 
+}
+
 void setupGLUT(int *argc, char *argv[])
 {
 	glutInit(argc, argv);
@@ -726,14 +596,110 @@ void setupGLUT(int *argc, char *argv[])
 		mgr->setUserTransform(head_position, head_orientation);
 		mgr->setTranslation(mgr->getTranslation() + speed * analog_values);
 		// Bubbles
-		if ( std::get<0>(blowing) ) scene->addChild(createBubble( std::get<1>(blowing)));	// create Bubble
-		traverse(scene, enter);			// traverse Scenegraph
-		removeOldBubbles();
+		if(!mode) {
+			if ( std::get<0>(blowing) ) scene->addChild(createBubble( std::get<1>(blowing)));	// create Bubble
+			traverse(scene, enter);			// traverse Scenegraph
+			removeOldBubbles();
+		}
+		else {
+			if (frequency > 100) traverse(scene, moveBubbles);		
+		}
 		commitChanges();
 		mgr->redraw();
 		// the changelist should be cleared - else things could be copied multiple times
 		OSG::Thread::getCurrentChangeList()->clear();
 	});
+}
+
+//------------------------------------------------------------------------------
+// MAIN
+//------------------------------------------------------------------------------
+
+int main(int argc, char **argv)
+{
+#if WIN32
+	OSG::preloadSharedObject("OSGFileIO");
+	OSG::preloadSharedObject("OSGImageFileIO");
+#endif
+	try
+	{
+
+		bool cfgIsSet = false;
+		scene = nullptr;
+
+		// ChangeList needs to be set for OpenSG 1.4
+		ChangeList::setReadWriteDefault();
+		osgInit(argc,argv);
+
+		// evaluate intial params
+		for(int a=1 ; a<argc ; ++a)
+		{
+			if( argv[a][0] == '-' )
+			{
+				if ( strcmp(argv[a],"-f") == 0 ) 
+				{
+					char* cfgFile = argv[a][2] ? &argv[a][2] : &argv[++a][0];
+					if (!cfg.loadFile(cfgFile)) 
+					{
+						std::cout << "ERROR: could not load config file '" << cfgFile << "'\n";
+						return EXIT_FAILURE;
+					}
+					cfgIsSet = true;
+				}
+			} else {
+				std::cout << "Loading scene file '" << argv[a] << "'\n";
+				scene = SceneFileHandler::the()->read(argv[a], NULL);
+			}
+		}
+
+		// load the CAVE setup config file if it was not loaded already:
+		if (!cfgIsSet) 
+		{
+			const char* const default_config_filename = "config/mono.csm";
+			if (!cfg.loadFile(default_config_filename)) 
+			{
+				std::cout << "ERROR: could not load default config file '" << default_config_filename << "'\n";
+				return EXIT_FAILURE;
+			}
+		}
+
+		cfg.printConfig();
+
+		// start servers for video rendering
+		if ( startServers(cfg) < 0 ) 
+		{
+			std::cout << "ERROR: Failed to start servers\n";
+			return EXIT_FAILURE;
+		}
+
+		setupGLUT(&argc, argv);
+
+		InitTracker(cfg);
+
+		setupPortAudio();
+
+
+		MultiDisplayWindowRefPtr mwin = createAppWindow(cfg, cfg.getBroadcastaddress());
+
+		if (!scene) 
+			scene = buildScene();
+		commitChanges();
+
+
+		mgr = new OSGCSM::CAVESceneManager(&cfg);
+		mgr->setWindow(mwin );
+		mgr->setRoot(scene);
+		mgr->showAll();
+		mgr->getWindow()->init();
+		mgr->turnWandOff();
+	}
+	catch(const std::exception& e)
+	{
+		std::cout << "ERROR: " << e.what() << '\n';
+		return EXIT_FAILURE;
+	}
+
+	glutMainLoop();
 }
 
 //------------------------------------------------------------------------------
@@ -747,7 +713,84 @@ void cleanup()
 	delete button;
 	delete analog;
 	scene = NULL;
+	nodePositions.clear();
+	nodesToRemove.clear();
 	err = Pa_Terminate();
 	if( err != paNoError ) printf(  "PortAudio Pa_Terminate() error: %s\n", Pa_GetErrorText( err ) );
 
+}
+
+//------------------------------------------------------------------------------
+// Keyboard Input
+//------------------------------------------------------------------------------
+
+void keyboard(unsigned char k, int x, int y)
+{
+	Real32 ed;
+	switch(k)
+	{
+		case 'q':
+		case 27: 
+			cleanup();
+			exit(EXIT_SUCCESS);
+			break;
+		case 'e':
+			ed = mgr->getEyeSeparation() * .9f;
+			std::cout << "Eye distance: " << ed << '\n';
+			mgr->setEyeSeparation(ed);
+			break;
+		case 'E':
+			ed = mgr->getEyeSeparation() * 1.1f;
+			std::cout << "Eye distance: " << ed << '\n';
+			mgr->setEyeSeparation(ed);
+			break;
+		case 'h':
+			cfg.setFollowHead(!cfg.getFollowHead());
+			std::cout << "following head: " << std::boolalpha << cfg.getFollowHead() << '\n';
+			break;
+		case 'i':
+			print_tracker();
+			break;
+		case 'c' : // create
+			// Start PortAudio Stream
+			//scene->addChild(createBubble());
+			err = Pa_StartStream( stream ); 
+			if( err != paNoError ) printf(  "PortAudio Pa_StartStream() error: %s\n", Pa_GetErrorText( err ) );
+			//Pa_IsStreamActive
+		break;
+		case 'g':
+			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z()-0.5f,head_orientation.w());
+			break;
+		case 'v':
+			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z(), cos((acos(head_orientation.w())*2 + PI/36)/2));
+			break;
+		case 'b':
+			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z()+0.5f,head_orientation.w());
+			break;
+		case 'n' : 
+			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z(), cos((acos(head_orientation.w())*2-PI/36)/2));
+			break;
+		case 'G':
+			head_position = Vec3f(head_position.x(),head_position.y(),head_position.z()-5);
+			break;
+		case 'V':
+			head_position = Vec3f(head_position.x()-5,head_position.y(),head_position.z());
+			break;
+		case 'B':
+			head_position = Vec3f(head_position.x(),head_position.y(),head_position.z()+5);
+			break;
+		case 'N' : 
+			head_position = Vec3f(head_position.x()+5,head_position.y(),head_position.z());
+			break;
+		case 's' : //stop
+			// Stop PortAudio Stream
+			err = Pa_AbortStream( stream ); // or Pa_StopStream( stream );
+			if( err != paNoError ) printf(  "PortAudio Pa_StopStream() error: %s\n", Pa_GetErrorText( err ) );
+			break;
+		case 'm' : 
+			mode = !mode;
+			break;
+		default:
+			std::cout << "Key '" << k << "' ignored\n";
+	}
 }
