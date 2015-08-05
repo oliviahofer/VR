@@ -99,8 +99,9 @@ OSGCSM::CAVESceneManager *mgr = nullptr; // the CaveSceneManager to manage appli
 vrpn_Tracker_Remote* tracker =  nullptr; // tracking
 vrpn_Button_Remote* button = nullptr;
 vrpn_Analog_Remote* analog = nullptr;
+ComponentTransformRecPtr headCT;
+ComponentTransformRecPtr directionCT;
 NodeRecPtr scene;
-NodeRecPtr buuble;
 std::list<NodeRecPtr> nodesToRemove;
 std::map <NodeRecPtr, std::tuple<OSG::Vec3f,float>> nodePositions;
 //Audio
@@ -108,15 +109,17 @@ std::map <NodeRecPtr, std::tuple<OSG::Vec3f,float>> nodePositions;
 #define SAMPLE_RATE			(44100)
 #define FRAMES_PER_BUFFER	(1024)
 #define SAMPLE_FORMAT		(paFloat32)
+#define inDevNum			(1)
+PaStreamParameters inputParameters;
 PaStream *stream; 
 PaError err;
 // FFT
 typedef std::complex<double> Complex;
 typedef std::valarray<Complex> CArray;
 // Modi
-std::tuple<boolean,float> blowing = std::tuple<boolean,float>(false,0.0);
+std::tuple<bool,float> blowing = std::tuple<bool,float>(false,0.0);
 float frequency = 0;
-boolean mode = false; // False = create Bubbles, true = fft
+bool mode = false; // False = create Bubbles, true = fft
 const double PI = 3.141592653589793238460;
  
 
@@ -127,10 +130,24 @@ const double PI = 3.141592653589793238460;
 // forward declaration so we can have the interesting parts upfront
 void setupGLUT(int *argc, char *argv[]);
 void print_tracker();
-NodeRecPtr createBubble(float radius);
+NodeTransitPtr createBubble(float radius);
 void keyboard(unsigned char k, int x, int y);
 void cleanup(); //cleanup the used modules and databases
 
+//------------------------------------------------------------------------------
+// Helper Direction Node
+//------------------------------------------------------------------------------
+
+Vec3f getDirection(ComponentTransformRecPtr parentCT, ComponentTransformRecPtr childCT){
+	Vec3f g = parentCT->getTranslation();
+	Vec3f p = childCT->getTranslation();
+	Quaternion q = parentCT->getRotation();
+	Vec3f p2 = Vec3f(0,0,0);
+
+	q.multVec(p * parentCT->getScale()[0], p2);
+	p2 = p2 + g;
+	return p2;
+}
 
 //------------------------------------------------------------------------------
 // PortAudio
@@ -177,9 +194,9 @@ static int patestCallback( const void *inputBuffer, void *outputBuffer,
 		for ( i=0; i<framesPerBuffer; i++ ){
 			if (in[i] >0.5) {
 				//printf(  "patestCallback: %f\n", in[i] );
-				blowing = std::tuple<boolean, float>(true, in[i]);
+				blowing = std::tuple<bool, float>(true, in[i]);
 			} else {
-				blowing = std::tuple<boolean, float>(false, 0.0);
+				blowing = std::tuple<bool, float>(false, 0.0);
 			}
 		}
 	}
@@ -221,16 +238,60 @@ int setupPortAudio() {
 	err = Pa_Initialize();
 	if( err != paNoError ) printf(  "PortAudio Pa_Initialize() error: %s\n", Pa_GetErrorText( err ) );	
 
-    /* Open an audio I/O stream. */
-    err = Pa_OpenDefaultStream( &stream,
-                                NUM_CHANNELS,		/* one input channel */
-                                0,					/* no output */
-                                SAMPLE_FORMAT,		/* sample format */
-                                SAMPLE_RATE,		/* sample rate */
-								FRAMES_PER_BUFFER,	/* frames per buffer*/
-                                patestCallback,		/* this is your callback function */
-                                NULL);				/* no data to pass */
-    if( err != paNoError ) printf(  "PortAudio Pa_OpenDefaultStream() error: %s\n", Pa_GetErrorText( err ) );
+	int numDevices;
+	numDevices = Pa_GetDeviceCount();
+	if( numDevices < 0 )
+		{
+			printf( "ERROR: Pa_CountDevices returned 0x%x\n", numDevices );
+			err = numDevices;
+		}
+	else {
+		const   PaDeviceInfo *deviceInfo;
+		for( int i=0; i<numDevices; i++ )
+			{
+			deviceInfo = Pa_GetDeviceInfo( i );
+			std::cout << " device " << i <<": " << deviceInfo->name << std::endl;
+			
+			inputParameters.channelCount = NUM_CHANNELS;
+			inputParameters.device = inDevNum;
+			inputParameters.hostApiSpecificStreamInfo = NULL;
+			inputParameters.sampleFormat =SAMPLE_FORMAT;
+			inputParameters.suggestedLatency = Pa_GetDeviceInfo(inDevNum)->defaultLowInputLatency ;
+			inputParameters.hostApiSpecificStreamInfo = NULL; //See you specific host's API docs for info on using this field
+
+
+			err = Pa_IsFormatSupported(&inputParameters, NULL , SAMPLE_RATE );
+			if( err == paFormatIsSupported )
+			{
+			      /* Open an audio I/O stream. */
+				err = Pa_OpenStream( 
+								&stream,
+                                &inputParameters,	// one input channel 
+                                NULL,				// no output 
+                                SAMPLE_RATE,		// sample rate 
+								FRAMES_PER_BUFFER,	// frames per buffer
+								paNoFlag,			// flags for clipping etc
+                                patestCallback,		// this is your callback function 
+                                NULL);				// no data to pass 
+				 if( err != paNoError ) printf(  "PortAudio Pa_OpenStream() error: %s\n", Pa_GetErrorText( err ) );
+			}
+			else
+			{
+			   printf("Too Bad.\n");
+			}
+		}
+	}
+
+
+    /*err = Pa_OpenDefaultStream( &stream,
+                                NUM_CHANNELS,		// one input channel 
+                                0,					// no output 
+                                SAMPLE_FORMAT,		// sample format 
+                                SAMPLE_RATE,		// sample rate 
+								FRAMES_PER_BUFFER,	// frames per buffer
+                                patestCallback,		// this is your callback function 
+                                NULL);				// no data to pass 
+    if( err != paNoError ) printf(  "PortAudio Pa_OpenDefaultStream() error: %s\n", Pa_GetErrorText( err ) ); */
 
 	return err;
 }
@@ -254,6 +315,8 @@ void VRPN_CALLBACK callback_head_tracker(void* userData, const vrpn_TRACKERCB tr
 {
 	head_orientation = Quaternion(tracker.quat[0], tracker.quat[1], tracker.quat[2], tracker.quat[3]);
 	head_position = Vec3f(scale_tracker2cm(Vec3d(tracker.pos)));
+	headCT->setRotation(head_orientation);
+	headCT->setTranslation(head_position);
 }
 
 auto wand_orientation = Quaternion();
@@ -273,8 +336,10 @@ void VRPN_CALLBACK callback_analog(void* userData, const vrpn_ANALOGCB analog)
 
 void VRPN_CALLBACK callback_button(void* userData, const vrpn_BUTTONCB button)
 {
-	if (button.button == 0 && button.state == 1)
+	if (button.button == 0 && button.state == 1){
+		scene->addChild(createBubble(0.5));
 		print_tracker();
+	}
 }
 
 void InitTracker(OSGCSM::CAVEConfig &cfg)
@@ -318,8 +383,9 @@ void print_tracker()
 //------------------------------------------------------------------------------
 // buildScene
 //------------------------------------------------------------------------------
-NodeRecPtr createBubble(float radius) {
+NodeTransitPtr createBubble(float radius) {
 	//printf(  "createBubble \n" );
+
 
 	//NodeRecPtr bubble = makeSphere(2,3);
 	GeometryRecPtr bubbleGeo = makeSphereGeo(2, (1/radius)*(1/radius)*(1/radius));
@@ -363,42 +429,22 @@ NodeRecPtr createBubble(float radius) {
     // component transform ************************************
     
     ComponentTransformRecPtr ct = ComponentTransform::create();
-	Vec3f ray_direction = Vec3f(0,0,0);
-
-	try{
-		// calculate orthogonal vector on head_orientation vector (always in y,z plane and in +z direction)
-		Vec3f ray_init_direction = Vec3f(1,0,0).cross(Vec3f(head_orientation.x(), head_orientation.y(), head_orientation.z()));
-		// turn vector the same angle the orientation vector is turned around the y axis
-		ray_init_direction.normalize();
-		head_orientation.multVec(ray_init_direction, ray_direction);
-		OSG::Line ray = Line(head_position + mgr->getTranslation(), ray_direction);
-		//NodeRecPtr line = make
-		//scene->addChild(ray);
-
-		// + mgr->getTranslation() ?
-		ct->setTranslation(head_position + mgr->getTranslation() + ray_direction*30 );
-
-		print_tracker();
-		std::cout << "Orthogonal vector: " << ray_init_direction << " direction: " << ray_direction << '\n';
-
-	}
-	catch(const std::exception& e)
-	{
-		printf("calculating ray_direction failed \n");
-	}
+	Vec3f direction = getDirection(headCT, directionCT) - headCT->getTranslation();
+	ct->setTranslation(head_position  + direction*30 );
 
 	NodeRecPtr bubbleTrans = Node::create();
 	bubbleTrans->setCore(ct);
 	bubbleTrans->addChild(bubble);
    
     // end component transform ********************************
-	std::string nodeName = "bubbleTrans:" + std::to_string(ray_direction.x()) + ":" + std::to_string(ray_direction.y()) + ":" + std::to_string(ray_direction.z())+ ":" + std::to_string(radius)+ ":" + std::to_string(glutGet(GLUT_ELAPSED_TIME));
+
+	std::string nodeName = "bubbleTrans:" + std::to_string(direction.x()) + ":" + std::to_string(direction.y()) + ":" + std::to_string(direction.z())+ ":" + std::to_string(radius)+ ":" + std::to_string(glutGet(GLUT_ELAPSED_TIME));
 
 	setName(bubbleGeo, "bubbleGeo");
 	setName(bubble, "bubble");
 	setName(bubbleTrans, nodeName);
 
-	return bubbleTrans;
+	return NodeTransitPtr(bubbleTrans);
 }
 
 NodeTransitPtr buildScene()
@@ -408,19 +454,39 @@ NodeTransitPtr buildScene()
 	scene->setCore(Group::create());
 
 	//Make Ground
-	NodeRecPtr ground = makePlane(200.f, 200.f, 1, 1);
+	GeometryRecPtr groundGeo = makePlaneGeo(250.f, 250.f, 1, 1);
+	SimpleMaterialRecPtr mat = SimpleMaterial::create();
+	mat->setAmbient(Color3f(0.4f, 0.f, 0.f));
+	groundGeo->setMaterial(mat);
+	NodeRecPtr ground = Node::create();
+	ground->setCore(groundGeo);
 	setName(ground, "ground");
 	//But it to our Feet
 	ComponentTransformRecPtr ct = ComponentTransform::create();
-	setName(ct, "ct");
-	//ct->setTranslation(Vec3f(0,-2,0));
 	ct->setRotation(Quaternion(Vec3f(1,0,0),osgDegree2Rad(90)));
 	NodeRecPtr groundTrans = Node::create();
 	setName(groundTrans, "groundTrans");
 	groundTrans->setCore(ct);
 	groundTrans->addChild(ground);
+
+	//Make Head
+	NodeRecPtr head = Node::create();
+	headCT = ComponentTransform::create();
+	head->setCore(headCT);
+	setName(head,"head");
+
+	//Make Direction
+	Vec3f direction_init = Vec3f(0,0,1);
+	NodeRecPtr direction = Node::create();
+	directionCT = ComponentTransform::create();
+	directionCT->setTranslation((getDirection(headCT, directionCT) - direction_init) - headCT->getTranslation());
+	direction->setCore(directionCT);
+	setName(direction, "direction");
+
 	//Add it to Root
+	head->addChild(direction);
 	scene->addChild(groundTrans);
+	scene->addChild(head);
 
 	return NodeTransitPtr(scene);
 }
@@ -449,6 +515,21 @@ std::vector<std::string> getProperties(const char *str)
 
 void detectCollisions(OSG::Node * const currentNode, Vec3f currentPosition, float currentRadius){
 
+	// Collision with wand
+	//wand_position = head_position;
+	float xd = currentPosition.x() - wand_position.x();
+	float yd = currentPosition.y() - wand_position.y();
+	float zd = currentPosition.z() - wand_position.z();
+
+	float distance = std::sqrt(xd*xd + yd*yd + zd*zd);
+
+	if( (std::abs(distance)) < ( (1/currentRadius)*(1/currentRadius)*(1/currentRadius))){
+		//std::cout << "wand collisionDetected: \n";
+		nodesToRemove.push_back(currentNode);
+		return;
+	}
+
+	// Collision with other bubbles
 	if(!nodePositions.empty()){
 		for(std::map<NodeRecPtr, std::tuple<OSG::Vec3f, float>>::iterator list_iter = nodePositions.begin();
 				list_iter != nodePositions.end(); list_iter++)
@@ -463,8 +544,23 @@ void detectCollisions(OSG::Node * const currentNode, Vec3f currentPosition, floa
 				float zd = currentPosition.z() - position.z();
 
 				float distance = std::sqrt(xd*xd + yd*yd + zd*zd);
-				if( (std::abs(distance)) > ( (1/currentRadius)*(1/currentRadius)*(1/currentRadius) + (1/radius)*(1/radius)*(1/radius)) ){
+				if( (std::abs(distance)) < ( (1/currentRadius)*(1/currentRadius)*(1/currentRadius) + (1/radius)*(1/radius)*(1/radius)) ){
+
 					//std::cout << "collisionDetected: \n";
+
+					std::vector<std::string> properties_currentNode = getProperties(getName(currentNode));
+					std::vector<std::string> properties_nodeToCompare = getProperties(getName(nodeToCompare));
+					// currentNode < nodeToCompare
+					if(std::stof( properties_currentNode[4]) < std::stof( properties_nodeToCompare[4]) ){
+						std::string nodeName = "bubbleTrans:" + properties_nodeToCompare[1] + ":" + properties_nodeToCompare[2] + ":" + properties_nodeToCompare[3] + ":" + properties_nodeToCompare[4] + ":" + properties_currentNode[5];
+						setName(currentNode, nodeName);
+					}
+					// currentNode > nodeToCompare
+					else {
+						std::string nodeName = "bubbleTrans:" + properties_currentNode[1] + ":" + properties_currentNode[2] + ":" + properties_currentNode[3] + ":" + properties_currentNode[4] + ":" + properties_nodeToCompare[5];
+						setName(nodeToCompare, nodeName);
+					}
+
 				}
 			}
 		}
@@ -479,9 +575,6 @@ OSG::Action::ResultE enter(OSG::Node * const node)
 	//if(strcmp(getName(node),"bubbleTrans") == 0)
     {
         //move bubble
-		//printf(  "moveBubble \n" );
-
-        //ct->setTranslation(OSG::Vec3f(0,cos(time/2000.f)*100,200)); 
 
 		Real32 time = glutGet(GLUT_ELAPSED_TIME);
 		std::vector<std::string> properties = getProperties(name);
@@ -496,9 +589,8 @@ OSG::Action::ResultE enter(OSG::Node * const node)
 			ComponentTransformRecPtr bt = dynamic_cast<ComponentTransform*>(node->getCore());
 
 			Vec3f vec = bt->getTranslation();
-			Vec3f direction = OSG::Vec3f( x , y - 0.001*v/2  ,z );
-			Vec3f vec2 = vec + direction * ( v/20 );
-
+			Vec3f direction = OSG::Vec3f( x , y - 0.01*v/2  ,z );
+			Vec3f vec2 = vec + direction;//* ( v/20 );
 
 			bt->setTranslation( vec2 ); //MOVE
 
@@ -509,10 +601,12 @@ OSG::Action::ResultE enter(OSG::Node * const node)
 			nodePositions[node] = std::tuple<OSG::Vec3f,float>(vec, v);
 			detectCollisions(node, vec, v);
 
+			// ground arrived
 			if ( vec.y() < v/2 ) {
 				direction = OSG::Vec3f( 0 , 0 , 0 );
 			}
 
+			// update ttl in nodeName
 			std::string nodeName = "bubbleTrans:" + std::to_string(direction.x()) + ":" + std::to_string(direction.y()) + ":" + std::to_string(direction.z())+ ":" + std::to_string(v)+ ":" + std::to_string(ttl);
 			setName(node, nodeName);
 
@@ -521,7 +615,10 @@ OSG::Action::ResultE enter(OSG::Node * const node)
 		else {
 			nodesToRemove.push_back(node);
 		}
-    } 
+    }
+	else if (std::strcmp(name, "bubbleGroup") == 0) {
+		if ( node->getNChildren() == 0 ) nodesToRemove.push_back(node);
+	}
 
     return OSG::Action::Continue; 
 }
@@ -551,7 +648,10 @@ OSG::Action::ResultE moveBubbles(OSG::Node * const node) {
 		std::vector<std::string> properties = getProperties(name);
 		float v = std::stof( properties[4] );
 		float x = 0;
-		float y = ( frequency - 330 ) *0.001 * ( v/20 );  // 330 = e
+		float y = -0.1 * ( v/20 );
+		if (frequency > 100 ) {
+			y = ((100*std::log10(frequency)) - (100*std::log10(330)) ) *0.01 * ( v/20 );  // 330 = e
+		}
 		float z = 0;
 
 		ComponentTransformRecPtr bt = dynamic_cast<ComponentTransform*>(node->getCore());
@@ -560,9 +660,9 @@ OSG::Action::ResultE moveBubbles(OSG::Node * const node) {
 		Vec3f direction = OSG::Vec3f( x , y ,z );
 		Vec3f vec2 = vec + direction;
 
-
 		bt->setTranslation( vec2 ); //MOVE
 
+		// ground arrived
 		if ( vec.y() <v/2 ) {
 			direction = OSG::Vec3f( 0 , 0 , 0 );
 		}
@@ -602,7 +702,7 @@ void setupGLUT(int *argc, char *argv[])
 			removeOldBubbles();
 		}
 		else {
-			if (frequency > 100) traverse(scene, moveBubbles);		
+			traverse(scene, moveBubbles);		
 		}
 		commitChanges();
 		mgr->redraw();
@@ -713,6 +813,8 @@ void cleanup()
 	delete button;
 	delete analog;
 	scene = NULL;
+	headCT = NULL;
+	directionCT = NULL;
 	nodePositions.clear();
 	nodesToRemove.clear();
 	err = Pa_Terminate();
@@ -759,16 +861,22 @@ void keyboard(unsigned char k, int x, int y)
 			//Pa_IsStreamActive
 		break;
 		case 'g':
-			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z()-0.5f,head_orientation.w());
+			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z()-0.05f,head_orientation.w());
 			break;
 		case 'v':
 			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z(), cos((acos(head_orientation.w())*2 + PI/36)/2));
 			break;
 		case 'b':
-			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z()+0.5f,head_orientation.w());
+			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z()+0.05f,head_orientation.w());
 			break;
 		case 'n' : 
 			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z(), cos((acos(head_orientation.w())*2-PI/36)/2));
+			break;
+		case 'y':
+			head_orientation = Quaternion(head_orientation.x()-0.05f,head_orientation.y(),head_orientation.z(),head_orientation.w());
+			break;
+		case 'x' : 
+			head_orientation = Quaternion(head_orientation.x()+0.05f,head_orientation.y(),head_orientation.z(), head_orientation.w());
 			break;
 		case 'G':
 			head_position = Vec3f(head_position.x(),head_position.y(),head_position.z()-5);
