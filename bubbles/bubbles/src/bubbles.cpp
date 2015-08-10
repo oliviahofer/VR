@@ -44,7 +44,7 @@ OSG_USING_NAMESPACE // activate the OpenSG namespace
 //------------------------------------------------------------------------------
 // Global Variables
 //------------------------------------------------------------------------------
-#define VELOCITY		(500) // (100) = eigener Laptop, (500) = Linux Cave
+#define VELOCITY		(600) // (100) = eigener Laptop, (500) = Linux Cave
 OSGCSM::CAVEConfig cfg;
 OSGCSM::CAVESceneManager *mgr = nullptr; // the CaveSceneManager to manage applications
 vrpn_Tracker_Remote* tracker =  nullptr; // tracking
@@ -60,7 +60,6 @@ std::map <NodeRecPtr, std::tuple<OSG::Vec3f,float>> nodePositions;
 #define SAMPLE_RATE			(44100)
 #define FRAMES_PER_BUFFER	(1024)
 #define SAMPLE_FORMAT		(paFloat32)
-#define inDevNum			(1)
 PaStreamParameters inputParameters;
 PaStream *stream; 
 PaError err;
@@ -197,12 +196,19 @@ int setupPortAudio() {
 			err = numDevices;
 		}
 	else {
-		//const   PaDeviceInfo *deviceInfo;
-		//for( int i=0; i<numDevices; i++ )
-			//{
-			//deviceInfo = Pa_GetDeviceInfo( i );
-			//std::cout << " device " << i <<": " << deviceInfo->name << std::endl;
+		const   PaDeviceInfo *deviceInfo;
+		for( int i=0; i<numDevices; i++ )
+			{
+			deviceInfo = Pa_GetDeviceInfo( i );
+			std::cout << " device " << i <<": " << deviceInfo->name << std::endl;
+		}
 			
+			int inDevNum = 1;
+			if(inDevNum >= numDevices){
+				printf( "ERROR: inDevNum (%d) > Pa_CountDevices (%d) \n", inDevNum, numDevices );
+				inDevNum = 0;
+			}
+
 			inputParameters.channelCount = NUM_CHANNELS;
 			inputParameters.device = inDevNum;
 			inputParameters.hostApiSpecificStreamInfo = NULL;
@@ -215,26 +221,29 @@ int setupPortAudio() {
 			if( err == paFormatIsSupported )
 			{
 			     printf("paFormatIsSupported.\n");
+				 
+				// Open an audio I/O stream. 
+				err = Pa_OpenStream( 
+					&stream,
+					&inputParameters,	// one input channel 
+					NULL,				// no output 
+					SAMPLE_RATE,		// sample rate 
+					FRAMES_PER_BUFFER,	// frames per buffer
+					paNoFlag,			// flags for clipping etc
+					patestCallback,		// this is your callback function 
+					NULL);				// no data to pass 
+				if( err != paNoError ) printf(  "PortAudio Pa_OpenStream() error: %s\n", Pa_GetErrorText( err ) );
+
 			}
 			else
 			{
 			   printf("Too Bad. paFormatIs NOT Supported \n");
 			}
 
-			err = Pa_OpenStream( 
-				&stream,
-                &inputParameters,	// one input channel 
-                NULL,				// no output 
-                SAMPLE_RATE,		// sample rate 
-				FRAMES_PER_BUFFER,	// frames per buffer
-				paNoFlag,			// flags for clipping etc
-                patestCallback,		// this is your callback function 
-                NULL);				// no data to pass 
-			if( err != paNoError ) printf(  "PortAudio Pa_OpenStream() error: %s\n", Pa_GetErrorText( err ) );
-		//}
+		
 	}
 
-	 /* Open an audio I/O stream. */
+	 // Open an audio I/O stream. (Default) 
     /*err = Pa_OpenDefaultStream( &stream,
                                 NUM_CHANNELS,		// one input channel 
                                 0,					// no output 
@@ -289,7 +298,7 @@ void VRPN_CALLBACK callback_analog(void* userData, const vrpn_ANALOGCB analog)
 void VRPN_CALLBACK callback_button(void* userData, const vrpn_BUTTONCB button)
 {
 	if (button.button == 0 && button.state == 1){
-		scene->addChild(createBubble(0.5));
+		mode = !mode;
 		print_tracker();
 	}
 }
@@ -338,7 +347,6 @@ void print_tracker()
 NodeTransitPtr createBubble(float radius) {
 	//printf(  "createBubble \n" );
 
-	//NodeRecPtr bubble = makeSphere(2,3);
 	GeometryRecPtr bubbleGeo = makeSphereGeo(2, (1/radius)*(1/radius)*(1/radius));
 	NodeRecPtr bubble = Node::create();
 	bubble->setCore(bubbleGeo);
@@ -381,17 +389,36 @@ NodeTransitPtr buildScene()
 	setName(scene, "scene");
 	scene->setCore(Group::create());
 
+	//Make Skybox
+	int scaleSkybox = 1;
+	NodeRecPtr skybox = SceneFileHandler::the()->read("images/skydome/skydome_day.WRL");
+	setName(skybox, "skybox");
+	ComponentTransformRecPtr skyboxCT = ComponentTransform::create();
+	skyboxCT->setTranslation(Vec3f(0,0,0));
+	skyboxCT->setScale(Vec3f(scaleSkybox,scaleSkybox,scaleSkybox)*0.01);
+	NodeRecPtr skyboxTrans = Node::create();
+	setName(skyboxTrans, "skyboxTrans");
+	skyboxTrans->setCore(skyboxCT);
+	skyboxTrans->addChild(skybox);
+	scene->addChild(skyboxTrans);
+
+	ImageRecPtr imageSkybox = Image::create();
+	imageSkybox->read("images/skydome/maps/ground.jpg");
+
+	// Create floor texture from floor image
+	SimpleTexturedMaterialRecPtr texSkybox = SimpleTexturedMaterial::create();
+	texSkybox->setImage(imageSkybox);
+
 	//Make Ground
 	GeometryRecPtr groundGeo = makePlaneGeo(270.f, 270.f, 1, 1);
-	SimpleMaterialRecPtr mat = SimpleMaterial::create();
-	mat->setAmbient(Color3f(0.4f, 0.f, 0.f));
-	groundGeo->setMaterial(mat);
+	groundGeo->setMaterial(texSkybox);
 	NodeRecPtr ground = Node::create();
 	ground->setCore(groundGeo);
 	setName(ground, "ground");
 	//But it to our Feet
 	ComponentTransformRecPtr ct = ComponentTransform::create();
 	ct->setRotation(Quaternion(Vec3f(1,0,0),osgDegree2Rad(90)));
+	ct->setScale(Vec3f(1,1,1)*10);
 	NodeRecPtr groundTrans = Node::create();
 	setName(groundTrans, "groundTrans");
 	groundTrans->setCore(ct);
@@ -416,34 +443,6 @@ NodeTransitPtr buildScene()
 	scene->addChild(groundTrans);
 	scene->addChild(head);
 
-	// Skybox
-	int scaleSkybox = 1;
-
-	//skydome_day.WRL
-	/*NodeRecPtr skybox = SceneFileHandler::the()->read("images/skydome/skydome_day.WRL");
-	setName(skybox, "skybox");
-	ComponentTransformRecPtr skyboxCT = ComponentTransform::create();
-	skyboxCT->setTranslation(Vec3f(0,0,0));
-	skyboxCT->setScale(Vec3f(scaleSkybox,scaleSkybox,scaleSkybox));
-
-	
-	skybox->setCore(skyboxCT);
-	// Create skybox Transform
-	NodeRecPtr skyboxTrans = Node::create();
-	setName(skyboxTrans, "skyboxTrans");
-
-	//NodeRecPtr skyboxTrans = makeNodeFor(skyboxCT);
-	skyboxTrans->addChild(skybox);
-	scene->addChild(skyboxTrans);
-
-	// Read floor texture
-	/*ImageRecPtr imageSkybox = Image::create();
-	imageSkybox->read("images/skydome/maps/Skymap_cambridge_gen2_square.jpg");
-
-	// Create floor texture from floor image
-	SimpleTexturedMaterialRecPtr texSkybox = SimpleTexturedMaterial::create();
-	texSkybox->setImage(imageSkybox);*/
-
 	return NodeTransitPtr(scene);
 }
 
@@ -454,10 +453,16 @@ NodeTransitPtr buildScene()
 
 bool isBubbleTrans(const char *str)
 {
-	const char *pre = "bubbleTrans";
-    size_t lenpre = strlen(pre),
-           lenstr = strlen(str);
-    return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
+	if(str){
+		const char *pre = "bubbleTrans";
+		size_t lenpre = strlen(pre),
+			   lenstr = strlen(str);
+		return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
+	}
+	else{
+		//printf("tried to enter Node without Name \n");
+		return false;
+	}
 }
 
 std::vector<std::string> getProperties(const char *str)
@@ -471,7 +476,6 @@ std::vector<std::string> getProperties(const char *str)
 void detectCollisions(OSG::Node * const currentNode, Vec3f currentPosition, float currentRadius){
 
 	// Collision with wand
-	//wand_position = head_position;
 	float xd = currentPosition.x() - wand_position.x();
 	float yd = currentPosition.y() - wand_position.y();
 	float zd = currentPosition.z() - wand_position.z();
@@ -528,51 +532,51 @@ OSG::Action::ResultE enter(OSG::Node * const node)
 {
 	const char *name = getName(node);
 
-	if(isBubbleTrans(name))
-	//if(strcmp(getName(node),"bubbleTrans") == 0)
-    {
-        //move bubble
+	if(name) 
+	{
+		if(isBubbleTrans(name))
+		{
+			//move bubble
 
-		Real32 time = glutGet(GLUT_ELAPSED_TIME);
-		std::vector<std::string> properties = getProperties(name);
-		Real32 ttl = std::stof(properties[5]);
-		float v = std::stof( properties[4] );
+			Real32 time = glutGet(GLUT_ELAPSED_TIME);
+			std::vector<std::string> properties = getProperties(name);
+			Real32 ttl = std::stof(properties[5]);
+			float v = std::stof( properties[4] );
 
-		if( (time-ttl) < (VELOCITY *100 *v) ) {
-			float x = std::stof( properties[1] );
-			float y = std::stof( properties[2] );
-			float z = std::stof( properties[3] );
+			if( (time-ttl) < (VELOCITY *100 *v) ) {
+				float x = std::stof( properties[1] );
+				float y = std::stof( properties[2] );
+				float z = std::stof( properties[3] );
 			
-			ComponentTransformRecPtr bt = dynamic_cast<ComponentTransform*>(node->getCore());
+				ComponentTransformRecPtr bt = dynamic_cast<ComponentTransform*>(node->getCore());
 
-			Vec3f vec = bt->getTranslation();
-			Vec3f direction = OSG::Vec3f( x , y - ((VELOCITY*v)/200000)  ,z );
-			Vec3f vec2 = vec + direction * (VELOCITY*v)/2000 ;
+				Vec3f vec = bt->getTranslation();
+				Vec3f direction = OSG::Vec3f( x , y - ((VELOCITY*v)/200000)  ,z );
+				Vec3f vec2 = vec + direction * (VELOCITY*v)/2000 ;
 
-			bt->setTranslation( vec2 ); //MOVE
+				bt->setTranslation( vec2 ); //MOVE
 
-			nodePositions[node] = std::tuple<OSG::Vec3f,float>(vec, v);
-			detectCollisions(node, vec, v);
+				nodePositions[node] = std::tuple<OSG::Vec3f,float>(vec, v);
+				detectCollisions(node, vec, v);
 
-			// ground arrived
-			if ( vec.y() < v/2 ) {
-				direction = OSG::Vec3f( 0 , 0 , 0 );
+				// ground arrived
+				if ( vec.y() < v/2 ) {
+					direction = OSG::Vec3f( 0 , 0 , 0 );
+				}
+
+				// update ttl in nodeName
+				std::string nodeName = "bubbleTrans:" + std::to_string(direction.x()) + ":" + std::to_string(direction.y()) + ":" + std::to_string(direction.z())+ ":" + std::to_string(v)+ ":" + std::to_string(ttl);
+				setName(node, nodeName);
+
 			}
-
-			// update ttl in nodeName
-			std::string nodeName = "bubbleTrans:" + std::to_string(direction.x()) + ":" + std::to_string(direction.y()) + ":" + std::to_string(direction.z())+ ":" + std::to_string(v)+ ":" + std::to_string(ttl);
-			setName(node, nodeName);
-
-			//std::cout << "nodePositions Size: " << nodePositions.size()  <<" \n";
+			else {
+				nodesToRemove.push_back(node);
+			}
 		}
-		else {
-			nodesToRemove.push_back(node);
+		else if (std::strcmp(name, "bubbleGroup") == 0) {
+			if ( node->getNChildren() == 0 ) nodesToRemove.push_back(node);
 		}
-    }
-	else if (std::strcmp(name, "bubbleGroup") == 0) {
-		if ( node->getNChildren() == 0 ) nodesToRemove.push_back(node);
 	}
-
     return OSG::Action::Continue; 
 }
 
@@ -812,47 +816,6 @@ void keyboard(unsigned char k, int x, int y)
 			break;
 		case 'i':
 			print_tracker();
-			break;
-		case 'c' : // create
-			// Start PortAudio Stream
-			err = Pa_StartStream( stream ); 
-			if( err != paNoError ) printf(  "PortAudio Pa_StartStream() error: %s\n", Pa_GetErrorText( err ) );
-			//Pa_IsStreamActive
-		break;
-		case 'g':
-			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z()-0.05f,head_orientation.w());
-			break;
-		case 'v':
-			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z(), cos((acos(head_orientation.w())*2 + PI/36)/2));
-			break;
-		case 'b':
-			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z()+0.05f,head_orientation.w());
-			break;
-		case 'n' : 
-			head_orientation = Quaternion(head_orientation.x(),head_orientation.y(),head_orientation.z(), cos((acos(head_orientation.w())*2-PI/36)/2));
-			break;
-		case 'y':
-			head_orientation = Quaternion(head_orientation.x()-0.05f,head_orientation.y(),head_orientation.z(),head_orientation.w());
-			break;
-		case 'x' : 
-			head_orientation = Quaternion(head_orientation.x()+0.05f,head_orientation.y(),head_orientation.z(), head_orientation.w());
-			break;
-		case 'G':
-			head_position = Vec3f(head_position.x(),head_position.y(),head_position.z()-5);
-			break;
-		case 'V':
-			head_position = Vec3f(head_position.x()-5,head_position.y(),head_position.z());
-			break;
-		case 'B':
-			head_position = Vec3f(head_position.x(),head_position.y(),head_position.z()+5);
-			break;
-		case 'N' : 
-			head_position = Vec3f(head_position.x()+5,head_position.y(),head_position.z());
-			break;
-		case 's' : //stop
-			// Stop PortAudio Stream
-			err = Pa_AbortStream( stream ); // or Pa_StopStream( stream );
-			if( err != paNoError ) printf(  "PortAudio Pa_StopStream() error: %s\n", Pa_GetErrorText( err ) );
 			break;
 		case 'm' : 
 			mode = !mode;
